@@ -10,29 +10,37 @@
 #include <unistd.h>
 #include <string.h>
 
+#define INITIAL_STORE_SIZE 256
+#define INITIAL_COMMAND_SIZE 16
+
 typedef struct CommandInfo {
 	char *command;
 	char *arguments[];
 } CommandInfo;
 
 int main(int argc, char *argv[]) {
-	char tmp_store1[256], tmp_store2[10];
+	char *tmp_store;
 	int i=0;
+    tmp_store = (char*)malloc(INITIAL_STORE_SIZE * sizeof(char));
+    int cur_length = INITIAL_STORE_SIZE; 
 	if (argc == 1){
 		//interactive mode
-		while(true) { 
-			fgets(tmp_store1, 256, stdin);
-			if (tmp_store1[strlen(tmp_store1)-1] !== '\n') {
-				//한 줄이 99자를 넘었을 경우
-				for(i= 98; i>0; i--){
-					if(tmp_command_store[i] == ';') {
-						break;
-					}
-				}
+		while(true) {
+            tmp_store[0] = '\0'; //initialization
+			if(fgets(tmp_store, sizeof(tmp_store) / sizeof(char), stdin) == NULL){
+		        //error handling for IO	
+    			return NULL;
 			}
-			else{
-				ForkAndExec(CommandParser(tmp_store1));	
-			}			
+			while (tmp_store[strlen(tmp_store)-1] !== '\n') {
+				//tmp_store에 한 줄을 다 저장하지 못했을 경우
+                realloc(tmp_store, 2*cur_length); 
+			    if(fgets(tmp_store[cur_length-1], cur_length+1, stdin) == NULL) {
+                    return NULL;
+                }
+                cur_length *= 2;
+			}
+			ForkAndExec(CommandParser(tmp_store));
+            free(tmp_store);	
 		}
 	}
 	else if (argc == 2){
@@ -47,14 +55,27 @@ int main(int argc, char *argv[]) {
 CommandInfo** CommandParser(char* input){
 	//줄 단위로 파싱한다.
 	char *big_parser, *small_parser;
+    int i=0, command_counter = 0, arg_counter = 0;
+    CommandInfo** command_infos = (CommandInfo**)malloc(sizeof(*CommandInfo)*INITIAL_COMMAND_SIZE);
+    for(i=0; i<INITIAL_COMMAND_SIZE; i++) {
+        command_infos[i] = (CommandInfo*)malloc(sizeof(CommandInfo));
+    }
 	
 	big_parser = strtok(input, " ; ");
 	while(big_parser!=NULL) {
 		//big parser는 한 줄을 " ; "을 기준으로 잘라 command+argument 단위로 분리
 		big_parser = strtok(NULL, " ; ");
-		small_parser = strtok(big_parser, " ");
+		if(small_parser = strtok(big_parser, " ") == NULL) {
+            exit(0);
+        }
+        arg_counter = 0;
+        CommandInfo tmp;
+        tmp.command = small_parser;
+        command_infos[command_counter] = &tmp;
 		while(small_parser!=NULL) {
-			//command와 argument를 분리
+			//argument를 분리
+			//TODO: do the rest part of this
+            command_infos[command_counter]->
 			small_parser = strtok(NULL, " ");
 		}
 	}
