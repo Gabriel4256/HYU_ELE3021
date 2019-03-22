@@ -15,70 +15,83 @@
 #define INITIAL_COMMAND_SIZE 16
 #define INITIAL_ARG_NUM 2
 
-typedef struct CommandInfo {
-	char *command;
-	char **arguments;
-} CommandInfo;
-
-CommandInfo** CommandParser(char* input){
+char** CommandParser(char* input){
 	//줄 단위로 파싱한다.
 	char *big_parser, *small_parser;
-    int i=0, j=0, command_counter = 0, arg_counter = 0;
-    CommandInfo** command_infos = (CommandInfo**)malloc(sizeof(CommandInfo*) * INITIAL_COMMAND_SIZE);
-	
+    int counter = 0;
+    char** command_infos = (char**)malloc(INITIAL_COMMAND_SIZE * sizeof(char*));
+	if(command_infos == NULL) {
+		//error handling when failed to allocate memory
+		exit(0);
+	}
+
 	big_parser = strtok(input, " ; ");
 	while(big_parser!=NULL) {
 		//big parser는 한 줄을 " ; "을 기준으로 잘라 command+argument 단위로 분리
 		if(small_parser = strtok(big_parser, " ") == NULL) {
             exit(0);
         }
-        CommandInfo tmp;
-        tmp.command = small_parser;
-		tmp.arguments = (char**)malloc(INITIAL_ARG_NUM * sizeof(char*));
-        command_infos[command_counter] = &tmp;
-		arg_counter = 0;
-		
+        command_infos[counter] = big_parser;
+		counter++;
+		command_infos[counter] = small_parser;
+		counter++;
+
 		while(small_parser = strtok(NULL, " ") !=NULL) {
 			//argument를 분리
 			//TODO: do the rest part of this
-			small_parser = strtok(NULL, " ");
-			arg_counter++;
-			if(arg_counter > sizeof(tmp.arguments) / sizeof(char*)){
-				realloc(tmp.arguments, 2* (arg_counter - 1));
+			command_infos[counter] = small_parser;
+			counter++;
+			if(counter >= sizeof(command_infos) / sizeof(char*)){
+				if(realloc(command_infos, 2* sizeof(command_infos)) == NULL) {
+					//error handling when failed to reallocate
+					exit(0);
+				}
 			}
-			tmp.arguments[arg_counter-1] = small_parser;
 		}
+		command_infos[counter] = NULL;
+		counter++;
 		big_parser = strtok(NULL, " ; ");
 	}
 	return command_infos;
 }
 
-void ForkAndExec(CommandInfo** commands) {
+void ForkAndExec(char** commands) {
 	int i=0;
-	for(i=0; i<sizeof(commands)/sizeof(CommandInfo); i++){
+	pid_t pid;
+	int counter = 0;
+	int* command_index = (int*)malloc(256*sizeof(int));
+	for(i=0; i<256; i++){
+		command_index[i] = -1;
+	}
+	for(i=0; i<sizeof(commands)/sizeof(char*); i++){
 		if(commands[i] == NULL) {
-			break;
+			if(counter >= sizeof(command_index) / sizeof(int)){
+				if(realloc(command_index, 2 * counter * sizeof(int)) == NULL) {
+					//error handling when failed to reallocate memory
+					exit(0);
+				}
+			}
+			command_index[counter] = i+1;
+			counter++;
 		}
-		pid_t pid;
+	}
+	for(i = 0; i<counter; i++;) {
 		pid = fork();
 		if(pid < 0){
 			//자식 프로세스 생성 실패
 			printf("failed to create a child process");
 		}
-		else if(pid == 0) { 
+		else if(pid == 0) {
 			//자식 프로세스에서 수행할 작업
 			i = 0;
-			
-			while(execvp(commands[i]->command, commands[i]->arguments) == -1){
-				if(i == 5){ // 실행에 실패하면 4번 더 시도하고 계속 실패하면 포기
-					printf("failed to execute command");
-					break;
-				}
-				i++;
+			if(execvp(commands[command_index[i]], &commands[command_index[i]]) == -1) {
+				// error handling when failed to execute command
+				exit(0);
 			}
 			exit(0);
 		}
 	}
+
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
 	wait(NULL);
 	return;	
@@ -99,7 +112,7 @@ int main(int argc, char *argv[]) {
 			}
 			while (tmp_store[strlen(tmp_store)-1] != '\n') {
 				//tmp_store에 한 줄을 다 저장하지 못했을 경우
-                realloc(tmp_store, 2*cur_length); 
+                realloc(tmp_store, 2 * cur_length * sizeof(char)); 
 			    if(fgets(tmp_store[cur_length-1], cur_length+1, stdin) == NULL) {
                     return NULL;
                 }
