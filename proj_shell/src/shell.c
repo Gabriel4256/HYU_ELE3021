@@ -43,7 +43,7 @@ int* CommandParser(char* input){
 	parser = strtok(input, ";");
 	while(parser != NULL) {
 		if(commands_counter > sizeof(commands) / sizeof(char*)) {
-			if(realloc(commands, 2 * sizeof(commands)) == NULL) {
+			if((commands = (char**)realloc(commands, 2 * sizeof(commands))) == NULL) {
 				printf("failed to allocate memory");
 				exit(0);
 			};
@@ -62,6 +62,7 @@ int* CommandParser(char* input){
 	for(i=0; i<commands_counter; i++) {
 		//commands[i] = strtok(commands[i], " \n\t");
 	}
+	//free(input);
 	command_num = commands_counter;
 	command_index = (int*)malloc(commands_counter * sizeof(int));
 	for(i=0; i<commands_counter; i++) {
@@ -74,12 +75,14 @@ int* CommandParser(char* input){
 		//strcpy(arguments[args_counter],commands[i]);
 		strcpy(arguments[args_counter], parser);
 		command_index[index_counter] = args_counter;
+		index_counter++;
+
 		args_counter++;
 		//strcpy(commands[i],parser);co
 		//strcpy(command_infos[i]->args[0], parser);
 		while((parser = strtok(NULL, "\n\t ")) != NULL) {
 			if(args_counter >= sizeof(arguments) / sizeof(char*)) {
-				if(realloc(arguments, 2 * sizeof(arguments)) == NULL) {
+				if((arguments = (char**)realloc(arguments,  (100 +args_counter) * sizeof(arguments))) == NULL) {
 					//error handling when failed to reallocate
 					exit(0);
 				}
@@ -113,7 +116,7 @@ void ForkAndExec(int* command_index) {
 		}
 		else if(pid == 0) {
 			// 자식 프로세스에서 수행할 작업 
-			if(execvp(args[command_index[i]], args + i) == -1) {
+			if(execvp(args[command_index[i]], args + command_index[i]) == -1) {
 				// 명령 실행에 실패했을 때
 				printf("failed to execute command\n");
 				exit(0);
@@ -125,7 +128,7 @@ void ForkAndExec(int* command_index) {
 		free(args[i]);
 	}
 	//free(args);
-	free(command_index);
+	//free(command_index);
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
 	wait(NULL);
 	return;	
@@ -135,10 +138,11 @@ int main(int argc, char *argv[]) {
 	char *tmp_store;
 	char j;
 	int i=0;
-	tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
-	int cur_length = INITIAL_MAX_INPUT_SIZE; 
+	int cur_length = INITIAL_MAX_INPUT_SIZE;
 	//CommandInfo** command_infos = (CommandInfo**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(CommandInfo*));
 	//command_infos[i] = (CommandInfo*)malloc(sizeof(CommandInfo));
+	tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
+
 
 	if (argc == 1){
 		//interactive mode
@@ -146,21 +150,23 @@ int main(int argc, char *argv[]) {
 			command_num = 0;
             tmp_store[0] = '\0'; //initialization
 			if(fgets(tmp_store, sizeof(tmp_store) / sizeof(char), stdin) == NULL){
-		        //error handling for IO	
-    			return NULL;
+		        //error handling for IO
+				printf("error occured while getting user input\n");	
+    			return -1;
 			}
 			// while((j = getchar()) != '\n') {
 			// 	if(strlen(tmp_store) > )
 			// }
 			while (tmp_store[strlen(tmp_store)-1] != '\n') {
 				//tmp_store에 한 줄을 다 저장하지 못했을 경우
-                tmp_store = realloc(tmp_store, 2 * cur_length * sizeof(char));
+                tmp_store = (char*)realloc(tmp_store, 2 * sizeof(tmp_store));
 			    if(fgets(&tmp_store[strlen(tmp_store)], cur_length * sizeof(char) , stdin) == NULL) {
 				
                     return -1;
                 }
                 cur_length *= 2;
 			}
+			//free(tmp_store);
 			ForkAndExec(CommandParser(tmp_store));	
 		}
 	}
@@ -170,7 +176,7 @@ int main(int argc, char *argv[]) {
 	else {
 		printf("Invalid format");
 	}
-	//free(command_index);
+	free(command_index);
 	free(tmp_store);
 	return 0;
 }
