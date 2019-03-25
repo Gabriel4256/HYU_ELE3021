@@ -19,9 +19,13 @@
 #define INITIAL_MAX_COMMAND_LENGTH 16
 #define INITIAL_MAX_ARG_NUM 2
 
+int *CommandParser(char* input);
+void ForkAndExec(int* command_index);
+
+
 int command_num = 0;
 char** args;
-int *command_index;
+//int *command_index;
 
 char* LeftRightTrim(char* input) {
 	int i = 0, start_index = 0, end_index = 0;
@@ -59,24 +63,50 @@ int* CommandParser(char* input){
 	//줄 단위로 파싱한다.
 	char *parser;
     int commands_counter = 0, args_counter=0, index_counter = 0, i=0;
-	char** commands = (char**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(char*));
-	char** arguments = (char**)malloc(INITIAL_MAX_ARG_NUM * sizeof(char*));
-	//int* command_index;
-    //CommandInfo** command_infos = (CommandInfo**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(CommandInfo*));
-	char *tmp_command_store = (char*)malloc((strlen(input) + 1) * sizeof(char));
-	if(commands == NULL) {
+	int max_num_of_commands = 1, max_num_of_args = 1;
+	char** commands = NULL;
+	//= (char**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(char*));
+	int commands_size = INITIAL_MAX_COMMAND_NUM;
+	char** arguments = NULL;
+	//= (char**)malloc(INITIAL_MAX_ARG_NUM * sizeof(char*));
+	int arguments_size = INITIAL_MAX_ARG_NUM;
+	int* command_index;
+	char *tmp_command_store = (char*)malloc((strlen(input) + 10) * sizeof(char));
+	if(input == NULL) {
 		//error handling when failed to allocate memory
 		exit(0);
 	}
+
+	for(i=0; i<strlen(input); i++){
+		if(isspace(input[i])){
+			max_num_of_args++;
+			while(isspace(input[i])){
+				i++;
+			}
+		}
+		else if(input[i] == ';'){
+			max_num_of_commands++;
+			while(input[i] == ';') {
+				i++;
+			}
+		}
+	}
+	
+	commands = (char**)malloc(max_num_of_commands * sizeof(char*));
+	arguments = (char**)malloc(max_num_of_args * sizeof(char*));
+
+
+
 	parser = strtok(input, ";");
 	while(parser != NULL) {
-		if(commands_counter > sizeof(commands) / sizeof(char*)) {
-			if((commands = (char**)realloc(commands, 2 * sizeof(commands))) == NULL) {
-				printf("Failed to allocate enough memory: Too many commands");
-				exit(0);
-			};
-		}
-		commands[commands_counter] = (char*)malloc((strlen(parser) + 1) * sizeof(char));
+		// if(commands_counter > commands_size) {
+		// 	if((commands = (char**)realloc(commands, 2 * commands_size * sizeof(char*))) == NULL) {
+		// 		printf("Failed to allocate enough memory: Too many commands");
+		// 		exit(0);
+		// 	};
+		// 	commands_size *= 2;
+		// }
+		commands[commands_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
 		strncpy(commands[commands_counter], parser, strlen(parser));
 		commands[commands_counter][strlen(parser)] = '\0';
 		commands_counter++;
@@ -84,7 +114,7 @@ int* CommandParser(char* input){
 	}
 	//free(input);
 	command_num = commands_counter;
-	command_index = (int*)malloc(commands_counter * sizeof(int));
+	command_index = (int*)malloc(max_num_of_commands * sizeof(int));
 	for(i=0; i<commands_counter; i++) {
 		strncpy(tmp_command_store, commands[i], strlen(commands[i]));
 		tmp_command_store[strlen(commands[i])] = '\0';
@@ -92,7 +122,9 @@ int* CommandParser(char* input){
 			printf("Error: meaningless space detected\n");
 			exit(0);
 		}
-		arguments[args_counter] = (char*)malloc((strlen(commands[i]) + 1) * sizeof(char));
+		arguments[args_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
+		//strncpy(arguments[args_counter], parser, strlen(parser));
+		//arguments[args_counter][strlen(parser)] = '\0';
 		strncpy(arguments[args_counter], parser, strlen(parser));
 		arguments[args_counter][strlen(parser)] = '\0';
 		command_index[index_counter] = args_counter;
@@ -100,30 +132,32 @@ int* CommandParser(char* input){
 
 		args_counter++;
 		while((parser = strtok(NULL, "\n\t ")) != NULL) {
-			if(args_counter >= sizeof(arguments) / sizeof(char*)) {
-				if((arguments = (char**)realloc(arguments,  (100 +args_counter) * sizeof(arguments))) == NULL) {
-					//error handling when failed to reallocate
-					printf("Failed to allocate enough memory: Too many arguments");
-					exit(0);
-				}
-			}
-			arguments[args_counter] = (char*)malloc((strlen(parser)+1) * sizeof(char));
+			// if(args_counter >= sizeof(arguments) / sizeof(char*)) {
+			// 	if((arguments = (char**)realloc(arguments,  2 * arguments_size * sizeof(char*))) == NULL) {
+			// 		//error handling when failed to reallocate
+			// 		printf("Failed to allocate enough memory: Too many arguments");
+			// 		exit(0);
+			// 	}
+			// 	arguments_size *= 2;
+			// }
+			arguments[args_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
 			
-			strcpy(arguments[args_counter], parser);
+			strncpy(arguments[args_counter], parser, strlen(parser));
+			arguments[args_counter][strlen(parser)] = '\0';
 			args_counter++;
 		}
 		arguments[args_counter] = NULL;
 		args_counter++;
 	}
 	for(i=0; i<commands_counter; i++){
-		if(sizeof(commands[i]) > 0) {
-			free(commands[i]);
+		if(strlen(commands[i]) > 0) {
+			//free(commands[i]);
 		}
 	}
-	if(sizeof(tmp_command_store) > 0){
-		free(tmp_command_store);
+	if(strlen(tmp_command_store) > 0){
+		//free(tmp_command_store);
 	}
-	free(commands);
+	//free(commands);
 	args = arguments;
 	return command_index;
 }
@@ -149,12 +183,12 @@ void ForkAndExec(int* command_index) {
 		}
 	}
 	for(i=0; i<sizeof(args) / sizeof(char*); i++){
-		if(args[i]){
-			free(args[i]);
+		if(args[i]!=NULL){
+			//free(args[i]);
 		}
 	}
-	free(args);
-	free(command_index);
+	//free(args);
+	//free(command_index);
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
 	for(i=0; i<command_num; i++){
 		wait(NULL);
@@ -162,13 +196,131 @@ void ForkAndExec(int* command_index) {
 	return;	
 }
 
+// int* CommandParser(char* input){
+// 	//줄 단위로 파싱한다.
+// 	char *parser = NULL;
+//     int commands_counter = 0, args_counter = 0, index_counter = 0, i=0;
+// 	int max_num_of_commands = 1, max_num_of_args = 1;
+// 	char** commands = NULL; 
+// 	//(char**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(char*));
+// 	int commands_size = INITIAL_MAX_COMMAND_NUM;
+// 	char** arguments = NULL; 
+// 	//(char**)malloc(INITIAL_MAX_ARG_NUM * sizeof(char*));
+// 	int arguments_size = INITIAL_MAX_ARG_NUM;
+// 	//int* command_index;
+// 	char *tmp_command_store = NULL;
+// 	int* command_index = NULL;
+
+// 	for(i=0; i<strlen(input); i++){
+// 		if(isspace(input[i])){
+// 			max_num_of_args++;
+// 			while(isspace(input[i])){
+// 				i++;
+// 			}
+// 		}
+// 		else if(input[i] == ';'){
+// 			max_num_of_commands++;
+// 			while(input[i] == ';') {
+// 				i++;
+// 			}
+// 		}
+// 	}
+	
+// 	commands = (char**)malloc(max_num_of_commands * sizeof(char*));
+// 	arguments = (char**)malloc(max_num_of_args * sizeof(char*));
+// 	parser = strtok(input, ";");
+// 	//commands = (char**)malloc(INITIAL_MAX_COMMAND_NUM * sizeof(char*));
+// 	while(parser != NULL) {
+// 		/*if(commands_counter > commands_size) {
+// 			if((commands = (char**)realloc(commands, 2 * commands_size * sizeof(char*))) == NULL) {
+// 				printf("Failed to allocate enough memory: Too many commands");
+// 				exit(0);
+// 			};
+// 			for(i=commands_size; i<2*commands_size; i++) {
+// 				commands[i] = NULL;
+// 			}
+// 			commands_size *= 2;
+// 		}*/
+// 		commands[commands_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
+// 		strncpy(commands[commands_counter], parser, strlen(parser));
+// 		commands[commands_counter][strlen(parser)] = '\0';
+// 		commands_counter++;
+// 		parser = strtok(NULL, ";");
+// 	}
+// 	//this is for test
+// 	commands_counter = 4;
+// 	//char *commands[4] = {"a b", "b", "c", "d"};
+// 	//
+
+// 	//free(input);
+// 	tmp_command_store = (char*)malloc((strlen(input) + 1) * sizeof(char));
+// 	command_num = commands_counter;
+// 	command_index = (int*)malloc(commands_counter * sizeof(int));
+// 	//int command_index[] = {0,2,4,6};
+// 	//arguments = (char**)malloc(INITIAL_MAX_ARG_NUM * sizeof(char*));
+// 	for(i=0; i<INITIAL_MAX_ARG_NUM; i++){
+// 		arguments[i] = NULL;
+// 	} 
+// 	for(i=0; i<commands_counter; i++) {
+// 		strcpy(tmp_command_store, commands[i]);
+// 		tmp_command_store[strlen(commands[i])] = '\0';
+// 		if((parser = strtok(tmp_command_store, "\n\t ")) == NULL){
+// 			printf("Error: meaningless space detected\n");
+// 			exit(0);
+// 		}
+// 		arguments[args_counter] = (char*)malloc((strlen(parser) + 1) * sizeof(char));
+// 		strncpy(arguments[args_counter], parser, strlen(parser));
+// 		arguments[args_counter][strlen(parser)] = '\0';
+// 		command_index[index_counter] = args_counter;
+// 		index_counter++;
+
+// 		args_counter++;
+// 		while((parser = strtok(NULL, " ")) != NULL) {
+// 		//for(i=0; i<4; i++){
+// 			//parser = strtok(NULL, "\n\t ");
+// 			printf("%s\n", parser);
+// 			/*if(args_counter >= arguments_size) {
+// 				if((arguments = (char**)realloc(arguments,  2 * arguments_size * sizeof(char*))) == NULL) {
+// 					//error handling when failed to reallocate
+// 					printf("Failed to allocate enough memory: Too many arguments");
+// 					for(i=arguments_size; i< 2* arguments_size; i++){
+// 						arguments[i] = NULL;
+// 					}
+// 					//exit(0);
+// 				}
+// 				arguments_size *= 2;
+// 			}*/
+// 			arguments[args_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
+			
+// 			strncpy(arguments[args_counter], parser, strlen(parser));
+// 			arguments[args_counter][strlen(parser)] = '\0';
+// 			args_counter++;
+// 		}
+// 		arguments[args_counter] = NULL;
+// 		args_counter++;
+// 		tmp_command_store[0] = '\0';
+// 	}
+// 	for(i=0; i<commands_counter; i++){
+// 		if(commands[i]!=NULL) {
+// 			free(commands[i]);
+// 		}
+// 	}
+// 	if(strlen(tmp_command_store) > 0){
+// 		free(tmp_command_store);
+// 	}
+// 	free(commands);
+// 	args = arguments;
+// 	return command_index;
+// }
+
 int main(int argc, char *argv[]) {
-	char tmp_store[512];
+	//char *tmp_store;
 	char j;
 	int i=0;
 	int cur_length = INITIAL_MAX_INPUT_SIZE;
 	//tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
-
+	char tmp_store[] = "a;b;f;g\n";
+	//CommandParser(tmp_store);
 
 	if (argc == 1){
 		//interactive mode
@@ -176,7 +328,7 @@ int main(int argc, char *argv[]) {
 			printf("prompt> ");
 			command_num = 0;
             tmp_store[0] = '\0'; //initialization
-			if(fgets(tmp_store, sizeof(tmp_store) / sizeof(char), stdin) == NULL){
+			if(fgets(tmp_store, cur_length, stdin) == NULL){
 		        //error handling for IO
 				printf("error occured while getting user input in interacive mode\n");	
     			return -1;
@@ -184,7 +336,7 @@ int main(int argc, char *argv[]) {
 			
 			while (tmp_store[strlen(tmp_store)-1] != '\n') {
 				//tmp_store에 한 줄을 다 저장하지 못했을 경우
-                //tmp_store = (char*)realloc(tmp_store, 2 * sizeof(tmp_store));
+                //tmp_store = (char*)realloc(tmp_store, 2 * cur_length * sizeof(char));
 			    if(fgets(&tmp_store[strlen(tmp_store)], cur_length * sizeof(char) , stdin) == NULL) {
 				
                     return -1;
@@ -196,6 +348,7 @@ int main(int argc, char *argv[]) {
 			}
 			//free(tmp_store);
 			ForkAndExec(CommandParser(tmp_store));	
+			//CommandParser(tmp_store);
 		}
 	}
 	else if (argc == 2){
@@ -241,11 +394,9 @@ int main(int argc, char *argv[]) {
 	else {
 		printf("Invalid format");
 	}
-	if(command_index){
-		free(command_index);
-	}
+	// if(command_index){
+	// 	free(command_index);
+	// }
 	//free(tmp_store);
 	return 0;
 }
-
-
