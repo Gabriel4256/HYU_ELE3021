@@ -2,9 +2,9 @@
 shell
 a.out
 test
-.vscode/*
+.vscode/
 ./src/test.c
 ./src/test
-./src/test.txt
-./src/shell.cpp
+./src/*.txt
+./src/*.cpp
 ./src/a.out
