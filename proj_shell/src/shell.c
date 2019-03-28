@@ -174,7 +174,7 @@ int* CommandParser(char* input){
  *	@return 없습니다
  */ 
 void ForkAndExec(int* command_index) {
-	int i = 0,j = 0;
+	int i = 0;
 	pid_t pid;
 
 	for (i = 0; i < g_commands_num; i++) {
@@ -208,10 +208,7 @@ void ForkAndExec(int* command_index) {
 }
 
 int main(int argc, char *argv[]) {
-	//char *tmp_store;
-	char j;
 	int i=0;
-	int cur_length = INITIAL_MAX_INPUT_SIZE;
 	char tmp_store[10000]; //사용자 입력을 받을 문자열
 
 	if (argc == 1) {
