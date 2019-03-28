@@ -39,7 +39,7 @@ char* LeftRightTrim(char* input) {
 
 	//left side trim
 	//문자열의 앞쪽부터 시작하여 공백이 있는 부분을 넘어서부터 문자열이 시작되도록 start_index 값을 증가시킨다.
-	for (i=0; i<(int)strlen(input); i++) {
+	for (i = 0; i < (int)strlen(input); i++) {
 		if (isspace(input[i])) {
 			start_index++;
 		}
@@ -50,8 +50,8 @@ char* LeftRightTrim(char* input) {
 
 	//right side trim
 	//문자열의 뒤쪽부터 시작하여 공백문자가 끝날때까지 공백문자를 NULL값으로 바꾼다.
-	for (i=(int)strlen(input) - 1; i>=0; i--) {
-		if(isspace(input[i])) {
+	for (i = (int)strlen(input) - 1; i >= 0; i--) {
+		if (isspace(input[i])) {
 			input[i] = '\0';
 		}
 		else {
@@ -88,9 +88,9 @@ char** ParseCommand(char* input){
 	input = LeftRightTrim(input);
 	num_of_commands = 1;
 	num_of_commands_and_args = 1;
-	for(i=0; i<(int)strlen(input); i++) {
+	for (i = 0; i < (int)strlen(input); i++) {
 
-		if (isspace(input[i] || input[i] == ';')) {
+		if (isspace(input[i]) || input[i] == ';') {
 			space_or_semicolon_flag = 1;
 		}
 		while (isspace(input[i]) || input[i] == ';') {
@@ -99,7 +99,7 @@ char** ParseCommand(char* input){
 			}
 			i++;
 		}
-		if(semicolon_flag) {
+		if (semicolon_flag) {
 			semicolon_flag = 0;
 			space_or_semicolon_flag = 0;
 			num_of_commands++;
@@ -114,7 +114,7 @@ char** ParseCommand(char* input){
 	g_commands_index = (int*)malloc(num_of_commands * sizeof(int)); //command 수 만큼 할당
 	commands_and_arguments = (char**)malloc(num_of_commands_and_args * sizeof(char*)); //command + argument 수 만큼 할당
 	commands = (char**)malloc(num_of_commands * sizeof(char*)); //command 개수 만큼의 공간을 할당
-	for (i=0; i<num_of_commands_and_args; i++) {
+	for (i = 0; i < num_of_commands_and_args; i++) {
 		commands_and_arguments[i] = NULL;
 	} 
 
@@ -129,7 +129,7 @@ char** ParseCommand(char* input){
 	}
 
 	// 
-	for (i=0; i<g_commands_counter; i++) {
+	for (i = 0; i < g_commands_counter; i++) {
 		if ((parser = strtok(commands[i], "\n\t\r\f\v ")) == NULL) {
 			//printf("Error: meaningless space detected between semicolons\n");
 			g_commands_counter--;
@@ -152,7 +152,7 @@ char** ParseCommand(char* input){
 		commands_and_arguments[args_counter] = NULL;
 		args_counter++;
 	}
-	for (i=0; i<g_commands_counter; i++) {
+	for (i = 0; i < g_commands_counter; i++) {
 		//if (strlen(commands[i]) > 0) {
 			//free(commands[i]);
 		//}
@@ -168,7 +168,7 @@ void ForkAndExec(char **commands_and_arguments) {
 	pid_t pid[10];
 	int childStatus;
 
-	for (i=0; i<g_commands_counter; i++) {
+	for (i = 0; i < g_commands_counter; i++) {
 		pid[i] = fork();
 		if (pid[i] < 0) {
 			// 자식 프로세스 생성에 실패했을 때
@@ -189,10 +189,10 @@ void ForkAndExec(char **commands_and_arguments) {
 	//free(commands_and_arguments);
 	//free(command_index);
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
-	for (i=0; i<g_commands_counter; i++) {
+	for (i = 0; i < g_commands_counter; i++) {
 		wait(&childStatus);
 	}
-	for (i=0; i<2 * g_commands_counter; i++) {
+	for (i = 0; i < 2 * g_commands_counter; i++) {
 		if (commands_and_arguments[i]!=NULL){
 			free(commands_and_arguments[i]);
 		}
@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
 	FILE *fp = NULL;
 	//char *tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
 	char tmp_store[1000];
-	if (argc == 1){
+	if (argc == 1) {
 		//tmp_store =  (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
 		//interactive mode
 		while (1) {
