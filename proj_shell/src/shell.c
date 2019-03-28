@@ -31,7 +31,7 @@ char** g_commands_and_arguments;
  */
 char* LeftRightTrim(char* input) {
 	int i = 0, start_index = 0, end_index = 0;
-	if(input == NULL) {
+	if (input == NULL) {
 		//input has no string
 		printf("Trim error: empty input");
 		return NULL;
@@ -39,7 +39,7 @@ char* LeftRightTrim(char* input) {
 
 	//left side trm
 	//문자열의 앞쪽부터 시작하여 공백이 있는 부분을 넘어서부터 문자열이 시작되도록 start_index 값을 증가시킨다.
-	for(i=0; i<strlen(input); i++) {
+	for (i = 0; i < strlen(input); i++) {
 		if(isspace(input[i])) {
 			start_index++;
 		}
@@ -51,8 +51,8 @@ char* LeftRightTrim(char* input) {
 	//right side trim
 	//문자열의 뒤쪽부터 시작하여 공백문자가 끝날때까지 공백문자를 NULL값으로 바꾼다.
 	end_index = strlen(input) - 1;
-	for (i=strlen(input) - 1; i>=0; i--) {
-		if(isspace(input[i])) {
+	for (i = strlen(input) - 1; i >= 0; i--) {
+		if (isspace(input[i])) {
 			input[i] = '\0';
 			end_index -= 1;
 		}
@@ -80,7 +80,7 @@ int* CommandParser(char* input){
 	int* command_index;
 	char *tmp_command_store = (char*)malloc((strlen(input) + 1) * sizeof(char));
 	int semicolon_flag = 0, space_or_semicolon_flag = 0; //input의 전체 command, argument 수를 세는 작업에서 필요한 변수들
-	if(input == NULL) {
+	if (input == NULL) {
 		//error handling when failed to allocate memory
 		exit(0);
 	}
@@ -121,7 +121,7 @@ int* CommandParser(char* input){
 
 	// input에서 (command  + arguments) 단위를 parsing해서 commands배열에 순서대로 저장
 	parser = strtok(input, ";");
-	while(parser != NULL) {
+	while (parser != NULL) {
 		commands[commands_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
 		strncpy(commands[commands_counter], parser, strlen(parser));
 		commands[commands_counter][strlen(parser)] = '\0';
@@ -136,10 +136,10 @@ int* CommandParser(char* input){
 	
 	//commands안에 있는 (command + arguments) 덩어리를 하나씩 꺼내서 tmp_command_store에 임시적으로 옮기고
 	//파싱하여 command들과 argument들을 분리하여 commands_and_argunents에 규칙대로 넣는다.
-	for(i=0; i<commands_counter; i++) {
+	for (i = 0; i < commands_counter; i++) {
 		strncpy(tmp_command_store, commands[i], strlen(commands[i]));
 		tmp_command_store[strlen(commands[i])] = '\0';
-		if((parser = strtok(tmp_command_store, "\n\t ")) == NULL){
+		if ((parser = strtok(tmp_command_store, "\n\t ")) == NULL) {
 			//세미콜론들 사이에 공백이 있을 때
 			continue;
 			g_commands_num--;
@@ -151,7 +151,7 @@ int* CommandParser(char* input){
 		index_counter++;
 
 		args_counter++;
-		while((parser = strtok(NULL, "\n\t ")) != NULL) {
+		while ((parser = strtok(NULL, "\n\t ")) != NULL) {
 			commands_and_arguments[args_counter] = (char*)malloc((strlen(parser) + 10) * sizeof(char));
 			
 			strncpy(commands_and_arguments[args_counter], parser, strlen(parser));
@@ -160,11 +160,6 @@ int* CommandParser(char* input){
 		}
 		commands_and_arguments[args_counter] = NULL;
 		args_counter++;
-	}
-	for(i=0; i<commands_counter; i++){
-		if(strlen(commands[i]) > 0) {
-			//free(commands[i]);
-		}
 	}
 	free(tmp_command_store);
 	free(commands);
@@ -182,16 +177,16 @@ void ForkAndExec(int* command_index) {
 	int i = 0,j = 0;
 	pid_t pid;
 
-	for(i=0; i<g_commands_num; i++){
+	for (i = 0; i < g_commands_num; i++) {
 		pid = fork();
-		if(pid < 0) {
+		if (pid < 0) {
 			// 자식 프로세스 생성에 실패했을 때
 			printf("failed to create a child process\n");
 			exit(0);
 		}
-		else if(pid == 0) {
+		else if (pid == 0) {
 			// 자식 프로세스에서 수행할 작업 
-			if(execvp(g_commands_and_arguments[command_index[i]], g_commands_and_arguments + command_index[i]) == -1) {
+			if (execvp(g_commands_and_arguments[command_index[i]], g_commands_and_arguments + command_index[i]) == -1) {
 				// 명령 실행에 실패했을 때
 				printf("failed to execute command: %s\n", g_commands_and_arguments[command_index[i]]);
 				exit(0);
@@ -199,14 +194,14 @@ void ForkAndExec(int* command_index) {
 			exit(0);
 		}
 	}
-	for(i=0; i<sizeof(g_commands_and_arguments) / sizeof(char*); i++){
-		if(g_commands_and_arguments[i]!=NULL){
+	for (i = 0; i < sizeof(g_commands_and_arguments) / sizeof(char*); i++) {
+		if (g_commands_and_arguments[i] != NULL) {
 			//free([i]);
 		}
 	}
 	free(command_index);
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
-	for(i=0; i<g_commands_num; i++){
+	for (i = 0; i < g_commands_num; i++) {
 		wait(NULL);
 	}
 	return;	
@@ -219,13 +214,13 @@ int main(int argc, char *argv[]) {
 	int cur_length = INITIAL_MAX_INPUT_SIZE;
 	char tmp_store[10000]; //사용자 입력을 받을 문자열
 
-	if (argc == 1){
+	if (argc == 1) {
 		//interactive mode
 		while(1) {
 			printf("prompt> ");
 			g_commands_num = 0;
             tmp_store[0] = '\0'; //initialization
-			if(fgets(tmp_store, sizeof(tmp_store) - 1, stdin) == NULL){
+			if (fgets(tmp_store, sizeof(tmp_store) - 1, stdin) == NULL) {
 		        //error handling for IO
 				printf("error occured while getting user input in interacive mode\n");	
     			return -1;
@@ -236,7 +231,7 @@ int main(int argc, char *argv[]) {
 				printf("Too large input!!\n");
 				return -1;
 			}
-			if(strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
+			if (strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
 				//quit 명령어가 들어오면 종료
 				return 0;
 			}
@@ -271,6 +266,10 @@ int main(int argc, char *argv[]) {
 			if (i == line_counter-1 && tmp_store[strlen(tmp_store) -1] != '\n') {
 				printf("\n");
 			}
+			if (strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
+				//quit 명령어가 들어오면 종료
+				return 0;
+			}
 			ForkAndExec(CommandParser(LeftRightTrim(tmp_store)));
 			tmp_store[0] = '\0';
 		}
@@ -279,8 +278,5 @@ int main(int argc, char *argv[]) {
 	else {
 		printf("Invalid format");
 	}
-	// if(command_index){
-	// 	free(command_index);
-	// }
 	return 0;
 }
