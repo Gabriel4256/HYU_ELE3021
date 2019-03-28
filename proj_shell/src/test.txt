@@ -1,3 +1,2 @@
-ls
-/bin/ls -al
-ls ; pwd; pwd; ls
+sdsdsdsdsd;sd;f;fsd;fsd;;
+a;a;a;a;
