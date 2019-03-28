@@ -1,2 +1,3 @@
-sdsdsdsdsd;sd;f;fsd;fsd;;
-a;a;a;a;
+ls
+ls -al ; ls ; ls ; ls -al
+ls; cwd ; cwd ;

@@ -39,7 +39,7 @@ char* LeftRightTrim(char* input) {
 
 	//left side trim
 	//문자열의 앞쪽부터 시작하여 공백이 있는 부분을 넘어서부터 문자열이 시작되도록 start_index 값을 증가시킨다.
-	for (i=0; i<strlen(input); i++) {
+	for (i=0; i<(int)strlen(input); i++) {
 		if (isspace(input[i])) {
 			start_index++;
 		}
@@ -50,7 +50,7 @@ char* LeftRightTrim(char* input) {
 
 	//right side trim
 	//문자열의 뒤쪽부터 시작하여 공백문자가 끝날때까지 공백문자를 NULL값으로 바꾼다.
-	for (i=strlen(input) - 1; i>=0; i--) {
+	for (i=(int)strlen(input) - 1; i>=0; i--) {
 		if(isspace(input[i])) {
 			input[i] = '\0';
 		}
@@ -88,7 +88,7 @@ char** ParseCommand(char* input){
 	input = LeftRightTrim(input);
 	num_of_commands = 1;
 	num_of_commands_and_args = 1;
-	for(i=0; i<strlen(input); i++) {
+	for(i=0; i<(int)strlen(input); i++) {
 
 		if (isspace(input[i] || input[i] == ';')) {
 			space_or_semicolon_flag = 1;
@@ -154,7 +154,7 @@ char** ParseCommand(char* input){
 	}
 	for (i=0; i<g_commands_counter; i++) {
 		//if (strlen(commands[i]) > 0) {
-			free(commands[i]);
+			//free(commands[i]);
 		//}
 	}
 	//free(tmp_command_store);
@@ -164,20 +164,24 @@ char** ParseCommand(char* input){
 }
 
 void ForkAndExec(char **commands_and_arguments) {
-	int i = 0,j = 0;
-	pid_t pid;
+	int i = 0;
+	pid_t pid[10];
+	int childStatus;
 
 	for (i=0; i<g_commands_counter; i++) {
-		pid = fork();
-		if (pid < 0) {
+		pid[i] = fork();
+		if (pid[i] < 0) {
 			// 자식 프로세스 생성에 실패했을 때
 			printf("failed to create a child process\n");
+			exit(0);
 		}
-		else if (pid == 0) {
+		else if (pid[i] == 0) {
+			//exit(0);
 			// 자식 프로세스에서 수행할 작업 
 			if (execvp(commands_and_arguments[g_commands_index[i]], commands_and_arguments + g_commands_index[i]) == -1) {
 				// 명령 실행에 실패했을 때
 				printf("failed to execute command: %s\n", commands_and_arguments[g_commands_index[i]]);
+				exit(-1);
 			}
 			exit(0);
 		}
@@ -186,7 +190,7 @@ void ForkAndExec(char **commands_and_arguments) {
 	//free(command_index);
 	//부모 프로세스에서는 모든 자식 프로세스가 끝나기를 기다린다.
 	for (i=0; i<g_commands_counter; i++) {
-		wait(NULL);
+		wait(&childStatus);
 	}
 	for (i=0; i<2 * g_commands_counter; i++) {
 		if (commands_and_arguments[i]!=NULL){
@@ -198,9 +202,10 @@ void ForkAndExec(char **commands_and_arguments) {
 
 int main(int argc, char *argv[]) {
 	//char *tmp_store;
-	char j;
-	int i=0;
+	//char j;
+	//int i=0;
 	int cur_length = INITIAL_MAX_INPUT_SIZE;
+	FILE *fp = NULL;
 	//char *tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
 	char tmp_store[1000];
 	if (argc == 1){
@@ -235,20 +240,20 @@ int main(int argc, char *argv[]) {
 	}
 	else if (argc == 2) {
 		//batch mode
-		FILE *fp = fopen(argv[1], "r");
-		
-		//파일을 여는데 실패했을 때
-		/*while(!feof(fp)){
-			printf("%s",fgets(tmp_store, sizeof(tmp_store), fp));		
-		}*/
+		fp = fopen(argv[1], "r");
+		if (fp == NULL) {
+			exit(-1);
+		}
+		char tmp_store[100];
 
-		
-		while (!feof(fp)) {
-			char tmp_store[10000];
+		while (!feof(fp) && !ferror(fp)) {
 			cur_length = INITIAL_MAX_INPUT_SIZE;
-			//tmp_store = (char*)malloc(INITIAL_MAX_INPUT_SIZE * sizeof(char));
-			tmp_store[0] = '\0';
-			if (fgets(tmp_store, sizeof(tmp_store), fp) == NULL) {
+			//char tmp_store[100];
+			//tmp_store[0] = '\0';
+			
+			//while(fgets(tmp_store, sizeof(tmp_store)))
+			
+			if (fgets(tmp_store, 100, fp) == NULL) {
 				//파일을 읽다가 에러 발생
 				if (feof(fp)) {
 					//break;
@@ -256,7 +261,7 @@ int main(int argc, char *argv[]) {
 				printf("error occured while reading a file in batch mode\n");
 				return -1;
 			}
-			while (tmp_store[strlen(tmp_store)-1] != '\n' && !feof(fp)) {
+			/*while (tmp_store[strlen(tmp_store)-1] != '\n' && !feof(fp)) {
 				if (strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
 					return 0;
 				}
@@ -264,7 +269,7 @@ int main(int argc, char *argv[]) {
 					return 0;
 				}
 				//tmp store에 file의 한 줄을 다 저장하지 못했을 경우
-				//tmp_store = (char*)realloc(tmp_store, 2*cur_length * sizeof(char));
+				tmp_store = (char*)realloc(tmp_store, 2*cur_length * sizeof(char));
 				if (fgets(&tmp_store[cur_length-1], cur_length * sizeof(char) , fp) == NULL) {
 					if(feof(fp)) {
 						break;
@@ -275,17 +280,17 @@ int main(int argc, char *argv[]) {
 					}
                 }
 				cur_length *= 2;
-			}
-			//printf("%s", tmp_store);
-			/*if (strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
-				return 0;
 			}*/
-			printf("%s\n", tmp_store);
+			printf("%s", tmp_store);
+			if (strcmp(LeftRightTrim(tmp_store), "quit") == 0) {
+				return 0;
+			}
 			ForkAndExec(ParseCommand(tmp_store));
-			free(g_commands_index);
+			//free(g_commands_index);
 			//free(tmp_store);
 		}
 		fclose(fp);
+
 	}
 	else {
 		printf("Invalid format");
