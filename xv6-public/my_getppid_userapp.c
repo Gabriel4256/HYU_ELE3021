@@ -4,7 +4,7 @@
 
 
 int main(){
-	printf(1, "process id is %d\n", getpid());
-	printf(1, "parent id is %d\n", getppid()); 
+	printf(1, "My pid is %d\n", getpid());
+	printf(1, "My ppid is %d\n", getppid()); 
 	exit();
 }
