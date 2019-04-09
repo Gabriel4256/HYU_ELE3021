@@ -49,6 +49,13 @@ sys_getppid(void)
 }
 
 int
+sys_yield(void)
+{
+	yield();
+	return 0;
+}
+
+int
 sys_sbrk(void)
 {
   int addr;
