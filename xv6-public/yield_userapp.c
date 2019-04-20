@@ -5,8 +5,9 @@
 int
 main(int argc, char *argv[])
 {
-	int i;
+	int i,j;
 	i = fork();
+ 	j = fork();
 while(1){
 	if(i > 0){
 		printf(1, "Parent\n");
@@ -19,3 +20,4 @@ while(1){
 }
 	exit();
 }
+

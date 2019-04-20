@@ -49,6 +49,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  float stride;                // stride length of this process
+  float tickets;
+  int schedmode;               // 0: normal default state, 1: called cpu_share, 2: schedulerd by MLFQ  
+  int path; 		       // total accumulated path of the process by stride
 };
 
 // Process memory is laid out contiguously, low addresses first:

@@ -48,11 +48,11 @@ sys_getppid(void)
   return myproc()->parent->pid;
 }
 
-int
+void
 sys_yield(void)
 {
 	yield();
-	return 0;
+	return;
 }
 
 int

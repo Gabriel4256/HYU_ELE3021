@@ -7,11 +7,105 @@
 #include "proc.h"
 #include "spinlock.h"
 
+struct procqueue
+{ 
+    int front, rear, size; 
+    unsigned capacity; 
+    struct proc* arr[NPROC]; 
+};
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
+  struct procqueue headers[2];
+  int lowside;
+  int defaultstride;
+  int defaultpath;
 } ptable;
+  
+int defaultstride = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 stride값
+int defaultpath = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 path값 중 최솟값
+const int totaltickets = 10000;
 
+// function to create a queue of given capacity.  
+// It initializes size of queue as 0 
+void initQueue(struct procqueue* queue){
+  queue->capacity = NPROC;
+  queue->front = queue->size = 0;
+  queue->rear = NPROC - 1;
+}
+  
+// Queue is full when size becomes equal to the capacity  
+int isFull(struct procqueue* queue) 
+{  return (queue->size == queue->capacity);  } 
+  
+// Queue is empty when size is 0 
+int isEmpty(struct procqueue* queue) 
+{  return (queue->size == 0); } 
+  
+// Function to add an item to the queue.   
+// It changes rear and size 
+void enqueue(struct procqueue* queue, struct proc* item) 
+{ 
+    if (isFull(queue)) 
+        return; 
+    queue->rear = (queue->rear + 1)%queue->capacity; 
+    queue->arr[queue->rear] = item; 
+    queue->size = queue->size + 1; 
+} 
+  
+// Function to remove an item from queue.  
+// It changes front and size 
+struct proc* dequeue(struct procqueue* queue) 
+{ 
+    if (isEmpty(queue)) 
+        return 0; 
+    struct proc* item = queue->arr[queue->front]; 
+    queue->front = (queue->front + 1)%queue->capacity; 
+    queue->size = queue->size - 1; 
+    return item; 
+} 
+  
+// Function to get front of queue 
+struct proc* front(struct procqueue* queue) 
+{ 
+    if (isEmpty(queue)) 
+        return 0; 
+    return queue->arr[queue->front]; 
+} 
+  
+// Function to get rear of queue 
+struct proc* rear(struct procqueue* queue) 
+{ 
+    if (isEmpty(queue)) 
+        return 0; 
+    return queue->arr[queue->rear]; 
+} 
+
+void redisttickets(){
+  defaultstride = ptable.headers[0].size  + ptable.headers[1].size;
+}
+
+//it's my function
+struct proc*
+choosebystride(){
+  struct proc* result = dequeue(&ptable.headers[ptable.lowside]);
+  while(result == 0 || result->state !=RUNNABLE){
+    if(result == 0){
+      if(front(&ptable.headers[1 - ptable.lowside]) == 0){
+        //there's no process to run
+        return 0;
+      }
+      //swap two queues
+      ptable.lowside = 1 - ptable.lowside;
+      defaultpath += defaultstride;
+    }
+    result = dequeue(&ptable.headers[ptable.lowside]);
+  }
+  return result;
+}
+
+///////////////////////////////
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -149,6 +243,16 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
+  p->schedmode = 0;
+
+  //push the newly executed process to the default queue
+  if(ptable.headers[0].capacity != NPROC){
+    ptable.lowside = 0;
+    initQueue(&ptable.headers[0]);
+    initQueue(&ptable.headers[1]);
+  }
+  enqueue(&ptable.headers[ptable.lowside], p);
+  redisttickets();
 
   release(&ptable.lock);
 }
@@ -215,6 +319,9 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->schedmode = 0;
+  enqueue(&ptable.headers[ptable.lowside], np);
+  redisttickets();
 
   release(&ptable.lock);
 
@@ -325,14 +432,15 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+  redisttickets();
   for(;;){
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    //for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    while((p = choosebystride()) != 0){
       if(p->state != RUNNABLE)
         continue;
 
@@ -348,10 +456,12 @@ scheduler(void)
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
+      // if(c->proc->state == RUNNABLE){
+      //   enqueue(&ptable.headers[1-ptable.lowside], c->proc);
+      // }
       c->proc = 0;
     }
     release(&ptable.lock);
-
   }
 }
 
@@ -376,6 +486,9 @@ sched(void)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
+  if(p->state == RUNNABLE){
+    enqueue(&ptable.headers[1-ptable.lowside], p);
+  }
   intena = mycpu()->intena;
   swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
@@ -459,9 +572,14 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
+      // totaldefaults++;
+      enqueue(&ptable.headers[0], p);
+      // redisttickets();
+    }
+  }
 }
 
 // Wake up all processes sleeping on chan.

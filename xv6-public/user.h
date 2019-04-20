@@ -25,7 +25,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int my_syscall(char*);
-void yield(void);
+int yield(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
