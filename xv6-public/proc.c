@@ -41,7 +41,6 @@ struct mlfqnode* headers[4];
 
 const int mlfqstride = 5;
 double mlfqpath = 0;
-int totalfixedshare = 0;
 struct proc* fixedmin = 0;
 struct mlfqnode* mlfqmin = 0;;
 int mlfq_slice_cnt = 0;
@@ -158,7 +157,7 @@ updatevals(){
   struct proc* p = 0;
   double min = -1;
   double min2 = -1;
-  totalfixedshare = 0;
+  int totalfixedshare = 0;
   vmp[0].highpr = 0;
   fixedmin = 0;
   int mlfqcnt = 0;
@@ -229,8 +228,14 @@ int
 cpu_share(int n)
 {
   struct proc* p;
+  int totalfixedshare = 0;
   acquire(&ptable.lock);
-  if(n ==0 || totalfixedshare  + n > 20){
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->schedmode == 1 && (p->state == RUNNABLE || p->state == SLEEPING))
+      totalfixedshare += p->fixedshare;
+  }
+
+  if(n <= 0 || totalfixedshare  + n > 20){
     release(&ptable.lock);
     return -1;
   }
@@ -239,7 +244,6 @@ cpu_share(int n)
   p->fixedshare = n;
   p->tickets = TOTAL_TICKETS * n /100;
   p->path = getminpath();
-  totalfixedshare += n;
   //cprintf("topreoperjureiorpe: %d\n", totalfixedshare);
   release(&ptable.lock);
   return 0;
@@ -512,9 +516,6 @@ exit(void)
 
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
-  if(curproc->schedmode == 1){
-    totalfixedshare-=curproc->fixedshare;
-  }
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
