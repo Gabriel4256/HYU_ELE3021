@@ -33,7 +33,7 @@ struct context {
 };
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
-
+enum schedulingmode {DEFAULT, FIXEDSHARE, MLFQ};
 
 struct mlfqnode
 {
@@ -59,12 +59,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  int schedmode;
-  double path;
-  int tickets;
-  int fixedshare;
-  int pathlevel;
-  struct mlfqnode* mnode;
+  enum schedulingmode schedmode; //Scheduling mode
+  double path;                 // striding path of the process
+  int fixedshare;              // fixed share of the process if called cpu_share
+  struct mlfqnode* mnode;      // pointer to mlfqnode, required if the process calls run_MLFQ
 };
 
 // Process memory is laid out contiguously, low addresses first:

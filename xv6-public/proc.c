@@ -16,64 +16,54 @@ struct {
 ////////////////////
 #define TOTAL_TICKETS 10000
 
-struct procqueue
-{ 
-    int front, rear, size; 
-    unsigned capacity; 
-    struct proc* arr[NPROC]; 
-};
-
-struct vmp
+struct
 {
   double stride, path;
   struct proc* highpr;
-} vmp[2];
+} defaultvmp;
+
+struct
+{
+  double stride, path;
+  struct mlfqnode* highpr;
+  int slice_cnt, tick_cnt;
+  int allottime[3], slice[3];
+} mlfqvmp;
 
 struct mlfqnode mlfqnodeslabs[NPROC + 4];
-
-struct mlfqinfo
-{
-  int allottime;
-  int slice;
-} mlfqinfo[3];
-
-struct mlfqnode* headers[4];
-
-// double vmp[1].path = 0;
+struct mlfqnode* mlfqheaders[4];
 struct proc* fixedmin = 0;
-// struct mlfqnode* vmp[1].highpr = 0;
-int mlfq_slice_cnt = 0;
-int mlfqtickcount = 0;
 double getminpath();
-struct proc* choosebymlfq();
+struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
 // function to create a queue of given capacity.  
 // It initializes size of queue as 0 
 
 void initmlfq(){
   int i;
-  if(!headers[0]){
+  if(!mlfqheaders[0]){
     for(i=0; i<4; i++){
-      headers[i] = &mlfqnodeslabs[NPROC + i];
-      headers[i]->state = -1;
+      mlfqheaders[i] = &mlfqnodeslabs[NPROC + i];
+      mlfqheaders[i]->state = -1;
     }
 
     for(i=0; i<4; i++){
       if(i!=3)
-        headers[i]->next = headers[i+1];
+        mlfqheaders[i]->next = mlfqheaders[i+1];
       if(i!=0)
-        headers[i]->prev = headers[i-1];
+        mlfqheaders[i]->prev = mlfqheaders[i-1];
     }
-    
-    mlfqinfo[0].allottime = 5;
-    mlfqinfo[0].slice = 1;
-    mlfqinfo[1].allottime = 10;
-    mlfqinfo[1].slice = 2;
-    mlfqinfo[2].allottime = 1000;
-    mlfqinfo[2].slice = 4;
 
-    vmp[1].stride = 5;
-    vmp[1].path = getminpath();
+    mlfqvmp.slice[0] = 1;
+    mlfqvmp.slice[1] = 2;
+    mlfqvmp.slice[2] = 4;
+    mlfqvmp.allottime[0] = 5;
+    mlfqvmp.allottime[1] = 10;
+    mlfqvmp.allottime[2] = 10000;    
+    mlfqvmp.path = getminpath();
+    mlfqvmp.stride = 5;
+    mlfqvmp.slice_cnt = 0;
+    mlfqvmp.highpr = 0;
   }
 }
 
@@ -128,19 +118,19 @@ void lowerlevel(struct mlfqnode* m){
   if(m->level == 2)
     return;
   remove(m);
-  insertBefore(headers[m->level + 2],m);
+  insertBefore(mlfqheaders[m->level + 2],m);
   m->level+=1;
 }
 
 void priorityboost(){
   struct mlfqnode* m;
-  if(headers[0]){
+  if(mlfqheaders[0]){
     int i;
     for(i=2; i>0; i--){
-      remove(headers[i]);
-      insertBefore(headers[i+1], headers[i]);
+      remove(mlfqheaders[i]);
+      insertBefore(mlfqheaders[i+1], mlfqheaders[i]);
     }
-    m = headers[0];
+    m = mlfqheaders[0];
     while(m){
       if(m->state == 1 && m->level!= 1){
         m->level = 0;
@@ -157,19 +147,19 @@ updatevals(){
   double min = -1;
   double min2 = -1;
   int totalfixedshare = 0;
-  vmp[0].highpr = 0;
+  defaultvmp.highpr = 0;
   fixedmin = 0;
   int mlfqcnt = 0;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == RUNNABLE){
-      if(p->schedmode == 0){
-        if(min2 == -1 || p->pathlevel< min2)
+      if(p->schedmode == DEFAULT){
+        if(min2 == -1 || p->path< min2)
         {
-          min2 = p->pathlevel;
-          vmp[0].highpr = p;
+          min2 = p->path;
+          defaultvmp.highpr = p;
         }
       }
-      else if(p->schedmode == 1){
+      else if(p->schedmode == FIXEDSHARE){
         totalfixedshare += p->fixedshare;
         if(min == -1 || p->path < min){
           fixedmin = p;
@@ -181,16 +171,16 @@ updatevals(){
       }
     }
   }
-  if(vmp[0].highpr){
-    vmp[0].highpr->path = vmp[0].path;
+  if(defaultvmp.highpr){
+    defaultvmp.highpr->path = defaultvmp.path;
   }
   if(mlfqcnt){
-    vmp[0].stride = (double)100 / (double)(80 - totalfixedshare);
+    defaultvmp.stride = (double)100 / (double)(80 - totalfixedshare);
   }
   else{
-    vmp[0].stride = (double)100 / (double)(100 - totalfixedshare);
+    defaultvmp.stride = (double)100 / (double)(100 - totalfixedshare);
   }
-  vmp[1].highpr = choosebymlfq();
+  mlfqvmp.highpr = choosebymlfq();
 }
 
 double 
@@ -214,8 +204,8 @@ getminpath(){
 int
 getminpathlevel()
 {
-  if(vmp[0].highpr)
-    return vmp[0].highpr->pathlevel;
+  if(defaultvmp.highpr)
+    return defaultvmp.highpr->path;
   return 0;
   
 }
@@ -227,7 +217,7 @@ cpu_share(int n)
   int totalfixedshare = 0;
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->schedmode == 1 && (p->state == RUNNABLE || p->state == SLEEPING))
+    if(p->schedmode == FIXEDSHARE && (p->state == RUNNABLE || p->state == SLEEPING))
       totalfixedshare += p->fixedshare;
   }
 
@@ -236,27 +226,27 @@ cpu_share(int n)
     return -1;
   }
   p = myproc();
-  p->schedmode = 1;
+  p->schedmode = FIXEDSHARE;
   p->fixedshare = n;
-  p->tickets = TOTAL_TICKETS * n /100;
   p->path = getminpath();
+  //cprintf("topreoperjureiorpe: %d\n", totalfixedshare);
   release(&ptable.lock);
   return 0;
 }
 
 int run_MLFQ(){
   struct mlfqnode* m;
-  if(!headers[0])
+  if(!mlfqheaders[0])
     initmlfq();
   m = allocmlfqnode(myproc());
-  myproc()->schedmode = 2;
-  insertafter(headers[0], m);
+  myproc()->schedmode = MLFQ;
+  insertafter(mlfqheaders[0], m);
   return 0;
 }
 
 int getlev(){
   struct proc* p = myproc();
-  if(p->schedmode!=2)
+  if(p->schedmode!=MLFQ)
     return -1;
   return p->mnode->level;
 }
@@ -399,12 +389,12 @@ userinit(void)
   acquire(&ptable.lock);
   
   p->state = RUNNABLE;
-  p->schedmode = 0;
+  p->schedmode = DEFAULT;
   updatevals();
-  if(vmp[0].highpr)
-    p->pathlevel = vmp[0].highpr->pathlevel;
+  if(defaultvmp.highpr)
+    p->path = defaultvmp.highpr->path;
   else
-    p->pathlevel = 0;
+    p->path = 0;
      //p->path = getminpath();
 
   release(&ptable.lock);
@@ -472,8 +462,8 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
-  np->schedmode = 0;
-  np->pathlevel = getminpathlevel();
+  np->schedmode = DEFAULT;
+  np->path = getminpathlevel();
   //np->path = getminpath();
   
   release(&ptable.lock);
@@ -583,14 +573,14 @@ getminproc(struct proc* a, struct proc* b){
 }
 
 
-struct proc*
+struct mlfqnode*
 choosebymlfq(){
-  if(headers[0] == 0)
+  if(mlfqheaders[0] == 0)
     return 0;
-  struct mlfqnode* m = headers[0];
+  struct mlfqnode* m = mlfqheaders[0];
   struct mlfqnode* tmp = 0;
-  if(vmp[1].highpr && vmp[1].highpr->state == RUNNABLE)
-    return vmp[1].highpr;
+  if(mlfqvmp.highpr && mlfqvmp.highpr->self->state == RUNNABLE)
+    return mlfqvmp.highpr;
   while(m){
     if(m->state != 1){
       
@@ -607,9 +597,9 @@ choosebymlfq(){
       break;
     m = m->next;
   }
-  if(!headers[0]->next)
-    headers[0] = 0;
-  return m->self;
+  if(!mlfqheaders[0]->next)
+    mlfqheaders[0] = 0;
+  return m;
 }
 
 struct proc*
@@ -617,14 +607,14 @@ choosebystride(){
   updatevals();
   //double minpath;
   // struct proc* tmp;
-  if(vmp[0].highpr)
-    vmp[0].highpr->path = vmp[0].path;
-  if(vmp[1].highpr){
-    vmp[1].highpr->path = vmp[1].path;
-    return getminproc(fixedmin, getminproc(vmp[1].highpr, vmp[0].highpr));
+  if(defaultvmp.highpr)
+    defaultvmp.highpr->path = defaultvmp.path;
+  if(mlfqvmp.highpr){
+    mlfqvmp.highpr->self->path = mlfqvmp.path;
+    return getminproc(fixedmin, getminproc(mlfqvmp.highpr->self, defaultvmp.highpr));
   }
   else{
-    return getminproc(fixedmin, vmp[0].highpr);
+    return getminproc(fixedmin, defaultvmp.highpr);
   }
 }
 
@@ -663,35 +653,35 @@ scheduler(void)
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
-      if(p->schedmode == 0){
-        vmp[0].path += vmp[0].stride;
-        p->pathlevel+=1;
-        // cprintf("default: %d\n", (int)(vmp[0].path));
+      if(p->schedmode == DEFAULT){
+        defaultvmp.path += defaultvmp.stride;
+        p->path+=1;
+        // cprintf("default: %d\n", (int)(defaultvmp.path));
       }
-      else if(p->schedmode ==1){
+      else if(p->schedmode ==FIXEDSHARE){
         p->path += (double)(100/(double)p->fixedshare);
         // cprintf("fixed: %d\n", (int) (p->path));
       }
-      else if(p->schedmode == 2){
-        vmp[1].path+= vmp[1].stride;
-        mlfq_slice_cnt++;
+      else if(p->schedmode == MLFQ){
+        mlfqvmp.path+= mlfqvmp.stride;
+        mlfqvmp.slice_cnt++;
         p->mnode->exec_time+=1;
-        mlfqtickcount++;
-        // cprintf("tick: %d %d\n", mlfqtickcount, (int)vmp[1].path);
-        if(mlfq_slice_cnt >= mlfqinfo[p->mnode->level].slice || p->state != RUNNABLE){
-          if(p->mnode->exec_time >= mlfqinfo[p->mnode->level].allottime){
+        mlfqvmp.tick_cnt++;
+        // cprintf("tick: %d %d\n", mlfqtickcount, (int)mlfqvmp.path);
+        if(mlfqvmp.slice_cnt >= mlfqvmp.slice[p->mnode->level] || p->state != RUNNABLE){
+          if(p->mnode->exec_time >= mlfqvmp.allottime[p->mnode->level]){
             lowerlevel(p->mnode);
             p->mnode->exec_time = 0;
           }
           else{
             remove(p->mnode);
-            insertBefore(headers[p->mnode->level +1], p->mnode);
+            insertBefore(mlfqheaders[p->mnode->level +1], p->mnode);
           }
-          mlfq_slice_cnt = 0;
-          vmp[1].highpr = 0;
+          mlfqvmp.slice_cnt = 0;
+          mlfqvmp.highpr = 0;
         }
-        if(mlfqtickcount == 100){
-          mlfqtickcount = 0;
+        if(mlfqvmp.tick_cnt == 100){
+          mlfqvmp.tick_cnt = 0;
           priorityboost();
         }
       }
