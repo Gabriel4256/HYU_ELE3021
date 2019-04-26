@@ -23,3 +23,6 @@
 #define SYS_my_syscall 22
 #define SYS_getppid 23
 #define SYS_yield 24
+#define SYS_cpu_share 25
+#define SYS_run_MLFQ 26
+#define SYS_getlev 27

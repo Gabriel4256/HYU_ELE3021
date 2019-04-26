@@ -121,6 +121,9 @@ int             wait(void);
 void            wakeup(void*);
 //newly added
 void            yield(void);
+int		        cpu_share(int);
+int             run_MLFQ();
+int             getlev(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

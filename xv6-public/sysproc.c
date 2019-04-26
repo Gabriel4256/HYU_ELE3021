@@ -102,3 +102,24 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int 
+sys_cpu_share(void)
+{
+  int n;
+  if(argint(0, &n) < 0)
+    return -1;
+  return cpu_share(n);
+}
+
+int
+sys_run_MLFQ(void)
+{
+  return run_MLFQ();
+}
+
+int
+sys_getlev(void)
+{
+  return getlev();
+}

@@ -26,6 +26,9 @@ int sleep(int);
 int uptime(void);
 int my_syscall(char*);
 int yield(void);
+int cpu_share(int);
+int run_MLFQ(void);
+int getlev(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -7,6 +7,13 @@
 #include "proc.h"
 #include "spinlock.h"
 
+struct {
+  struct spinlock lock;
+  struct proc proc[NPROC];
+} ptable;
+
+
+////////////////////
 struct procqueue
 { 
     int front, rear, size; 
@@ -14,98 +21,253 @@ struct procqueue
     struct proc* arr[NPROC]; 
 };
 
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-  struct procqueue headers[2];
-  int lowside;
-  int defaultstride;
-  int defaultpath;
-} ptable;
-  
-int defaultstride = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 stride값
-int defaultpath = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 path값 중 최솟값
-const int totaltickets = 10000;
+// struct mlfqnode
+// {
+//   struct mlfqnode* prev, *next;
+//   struct proc* self;
+//   int state; //0: unused, 1: used, -1: header
+//   int level;
+//   int exec_time; //executed time on this level
+// } mlfqnodeslabs[NPROC + 4];
+struct mlfqnode mlfqnodeslabs[NPROC + 4];
 
+struct mlfqinfo
+{
+  int allottime;
+  int slice;
+} mlfqinfo[3];
+
+struct mlfqnode* headers[4];
+
+int defaultcnt = 0;
+double defaultstride = 1;//스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 stride값
+double defaultpath = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 path값 중 최솟값
+const int mlfqstride = 5;
+double mlfqpath = 0;
+const int totaltickets = 10000;
+int totalfixedshare = 0;
+struct proc* fixedmin = 0;
+struct proc* defaultmin = 0;
+struct mlfqnode* mlfqmin = 0;;
+int mlfq_slice_cnt = 0;
+int mlfqtickcount = 0;
+double getminpath();
+struct mlfqnode* choosebymlfq();
+struct proc* choosebystride();
 // function to create a queue of given capacity.  
 // It initializes size of queue as 0 
-void initQueue(struct procqueue* queue){
-  queue->capacity = NPROC;
-  queue->front = queue->size = 0;
-  queue->rear = NPROC - 1;
-}
-  
-// Queue is full when size becomes equal to the capacity  
-int isFull(struct procqueue* queue) 
-{  return (queue->size == queue->capacity);  } 
-  
-// Queue is empty when size is 0 
-int isEmpty(struct procqueue* queue) 
-{  return (queue->size == 0); } 
-  
-// Function to add an item to the queue.   
-// It changes rear and size 
-void enqueue(struct procqueue* queue, struct proc* item) 
-{ 
-    if (isFull(queue)) 
-        return; 
-    queue->rear = (queue->rear + 1)%queue->capacity; 
-    queue->arr[queue->rear] = item; 
-    queue->size = queue->size + 1; 
-} 
-  
-// Function to remove an item from queue.  
-// It changes front and size 
-struct proc* dequeue(struct procqueue* queue) 
-{ 
-    if (isEmpty(queue)) 
-        return 0; 
-    struct proc* item = queue->arr[queue->front]; 
-    queue->front = (queue->front + 1)%queue->capacity; 
-    queue->size = queue->size - 1; 
-    return item; 
-} 
-  
-// Function to get front of queue 
-struct proc* front(struct procqueue* queue) 
-{ 
-    if (isEmpty(queue)) 
-        return 0; 
-    return queue->arr[queue->front]; 
-} 
-  
-// Function to get rear of queue 
-struct proc* rear(struct procqueue* queue) 
-{ 
-    if (isEmpty(queue)) 
-        return 0; 
-    return queue->arr[queue->rear]; 
-} 
 
-void redisttickets(){
-  defaultstride = ptable.headers[0].size  + ptable.headers[1].size;
-}
-
-//it's my function
-struct proc*
-choosebystride(){
-  struct proc* result = dequeue(&ptable.headers[ptable.lowside]);
-  while(result == 0 || result->state !=RUNNABLE){
-    if(result == 0){
-      if(front(&ptable.headers[1 - ptable.lowside]) == 0){
-        //there's no process to run
-        return 0;
-      }
-      //swap two queues
-      ptable.lowside = 1 - ptable.lowside;
-      defaultpath += defaultstride;
+void initmlfq(){
+  int i;
+  if(!headers[0]){
+    for(i=0; i<4; i++){
+      headers[i] = &mlfqnodeslabs[NPROC + i];
+      headers[i]->state = -1;
     }
-    result = dequeue(&ptable.headers[ptable.lowside]);
+
+    for(i=0; i<4; i++){
+      if(i!=3)
+        headers[i]->next = headers[i+1];
+      if(i!=0)
+        headers[i]->prev = headers[i-1];
+    }
+    
+    mlfqinfo[0].allottime = 5;
+    mlfqinfo[0].slice = 1;
+    mlfqinfo[1].allottime = 10;
+    mlfqinfo[1].slice = 2;
+    mlfqinfo[2].allottime = 1000;
+    mlfqinfo[2].slice = 4;
+
+    mlfqpath = getminpath();
   }
-  return result;
 }
 
-///////////////////////////////
+struct mlfqnode* allocmlfqnode(struct proc* p)
+{
+  struct mlfqnode* m = 0;
+  for(m = mlfqnodeslabs; m<&mlfqnodeslabs[NPROC+4]; m++){
+    if(!m->state)
+      break;
+  }
+  m->self = p;
+  p->mnode = m;
+  m->next =0; m->prev = 0; m->level = 0; m->exec_time = 0;
+  m->state = 1;
+  return m;
+}
+
+void insertafter(struct mlfqnode* target, struct mlfqnode* mover){
+  mover->prev = target;
+  if(target->next)
+    target->next->prev = mover;
+  mover->next = target->next;
+  target->next = mover;
+}
+
+void insertBefore(struct mlfqnode* target, struct mlfqnode* mover){
+  mover->next = target;
+  if(target->prev)
+    target->prev->next = mover;
+  mover->prev = target->prev;
+  target->prev = mover;
+}
+
+void remove(struct mlfqnode* m){
+  if(m->prev)
+    m->prev->next = m->next;
+  if(m->next)
+    m->next->prev = m->prev;
+  m->next =0;
+  m->prev = 0;
+}
+
+void delete(struct mlfqnode* m){
+  remove(m);
+  m->state = 0;
+  m->level = 0;
+  m->exec_time = 0;
+  m->self = 0;
+}
+
+void lowerlevel(struct mlfqnode* m){
+  if(m->level == 2)
+    return;
+  remove(m);
+  insertBefore(headers[m->level + 2],m);
+  m->level+=1;
+}
+
+void priorityboost(){
+  struct mlfqnode* m;
+  if(headers[0]){
+    int i;
+    for(i=2; i>0; i--){
+      remove(headers[i]);
+      insertBefore(headers[i+1], headers[i]);
+    }
+    m = headers[0];
+    while(m){
+      if(m->state == 1 && m->level!= 1){
+        m->level = 0;
+        m->exec_time = 0;
+      }
+      m = m->next;
+    }
+  }
+}
+
+void 
+updatevals(){
+  // int lowcount = 0;
+  struct proc* p = 0;
+  double min = -1;
+  double min2 = -1;
+  totalfixedshare = 0;
+  defaultmin = 0;
+  fixedmin = 0;
+  int mlfqcnt = 0;
+  //acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == RUNNABLE){
+      if(p->schedmode == 0){
+        if(min2 == -1 || p->pathlevel< min2)
+        {
+          min2 = p->pathlevel;
+          defaultmin = p;
+        }
+      }
+      else if(p->schedmode == 1){
+        totalfixedshare += p->fixedshare;
+        if(min == -1 || p->path < min){
+          fixedmin = p;
+          min = p->path;
+        }
+      }
+      else{
+        mlfqcnt++;
+      }
+    }
+  }
+  if(defaultmin){
+    defaultmin->path = defaultpath;
+    // cprintf("default min exist!\n");
+  }
+  if(mlfqcnt){
+    defaultstride = (double)100 / (double)(80 - totalfixedshare);
+  }
+  else{
+    defaultstride = (double)100 / (double)(100 - totalfixedshare);
+  }
+  mlfqmin = choosebymlfq();
+  //release(&ptable.lock);
+}
+
+double 
+min(double a, double b){
+  if(a > b)
+    return b;
+  else
+    return a;
+}
+
+double
+getminpath(){
+  //minimum path를 반환
+  struct proc* p;
+  p = choosebystride();
+  if(p)
+    return p->path;
+  return 0;
+}
+
+int
+getminpathlevel()
+{
+  if(defaultmin)
+    return defaultmin->pathlevel;
+  return 0;
+  
+}
+
+int 
+cpu_share(int n)
+{
+  struct proc* p;
+  acquire(&ptable.lock);
+  if(n ==0 || totalfixedshare  + n > 20){
+    release(&ptable.lock);
+    return -1;
+  }
+  p = myproc();
+  p->schedmode = 1;
+  p->fixedshare = n;
+  p->tickets = totaltickets * n /100;
+  p->path = getminpath();
+  totalfixedshare += n;
+  //cprintf("topreoperjureiorpe: %d\n", totalfixedshare);
+  release(&ptable.lock);
+  return 0;
+}
+
+int run_MLFQ(){
+  struct mlfqnode* m;
+  if(!headers[0])
+    initmlfq();
+  m = allocmlfqnode(myproc());
+  myproc()->schedmode = 2;
+  insertafter(headers[0], m);
+  return 0;
+}
+
+int getlev(){
+  struct proc* p = myproc();
+  if(p->schedmode!=2)
+    return -1;
+  return p->mnode->level;
+}
+/////////////////////
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -241,18 +403,15 @@ userinit(void)
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
-
+  
   p->state = RUNNABLE;
   p->schedmode = 0;
-
-  //push the newly executed process to the default queue
-  if(ptable.headers[0].capacity != NPROC){
-    ptable.lowside = 0;
-    initQueue(&ptable.headers[0]);
-    initQueue(&ptable.headers[1]);
-  }
-  enqueue(&ptable.headers[ptable.lowside], p);
-  redisttickets();
+  updatevals();
+  if(defaultmin)
+    p->pathlevel = defaultmin->pathlevel;
+  else
+    p->pathlevel = 0;
+     //p->path = getminpath();
 
   release(&ptable.lock);
 }
@@ -320,9 +479,9 @@ fork(void)
 
   np->state = RUNNABLE;
   np->schedmode = 0;
-  enqueue(&ptable.headers[ptable.lowside], np);
-  redisttickets();
-
+  np->pathlevel = getminpathlevel();
+  //np->path = getminpath();
+  
   release(&ptable.lock);
 
   return pid;
@@ -358,7 +517,9 @@ exit(void)
 
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
-
+  if(curproc->schedmode == 1){
+    totalfixedshare-=curproc->fixedshare;
+  }
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
@@ -418,6 +579,65 @@ wait(void)
   }
 }
 
+struct proc*
+getminproc(struct proc* a, struct proc* b){
+  if(a == 0)
+    return b;
+  if(b == 0)
+    return a;
+  if(a->path > b->path)
+    return b;
+  else
+    return a;
+}
+
+
+struct mlfqnode*
+choosebymlfq(){
+  if(headers[0] == 0)
+    return 0;
+  struct mlfqnode* m = headers[0];
+  struct mlfqnode* tmp = 0;
+  if(mlfqmin && mlfqmin->self->state == RUNNABLE)
+    return mlfqmin;
+  while(m){
+    if(m->state != 1){
+      
+      m = m->next;
+      continue;
+    }
+    if(m->self->state != RUNNABLE && m->self->state != SLEEPING){
+      tmp = m;
+      m = m->next;
+      delete(tmp);
+      continue;
+    }
+    if(m->self->state == RUNNABLE)
+      break;
+    m = m->next;
+  }
+  if(!headers[0]->next)
+    headers[0] = 0;
+  return m;
+}
+
+struct proc*
+choosebystride(){
+  updatevals();
+  //double minpath;
+  // struct proc* tmp;
+  if(defaultmin)
+    defaultmin->path = defaultpath;
+  if(mlfqmin){
+    mlfqmin->self->path = mlfqpath;
+    return getminproc(fixedmin, getminproc(mlfqmin->self, defaultmin));
+  }
+  else{
+    return getminproc(fixedmin, defaultmin);
+  }
+}
+
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -432,7 +652,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  redisttickets();
+  
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -440,28 +660,56 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     //for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    while((p = choosebystride()) != 0){
+    while((p = choosebystride()) !=0){
       if(p->state != RUNNABLE)
         continue;
-
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
+      if(p->schedmode == 0){
+        defaultpath += defaultstride;
+        p->pathlevel+=1;
+        // cprintf("default: %d\n", (int)(defaultpath));
+      }
+      else if(p->schedmode ==1){
+        p->path += (double)(100/(double)p->fixedshare);
+        // cprintf("fixed: %d\n", (int) (p->path));
+      }
+      else if(p->schedmode == 2){
+        mlfqpath+= (double)mlfqstride;
+        mlfq_slice_cnt++;
+        p->mnode->exec_time+=1;
+        mlfqtickcount++;
+        // cprintf("tick: %d %d\n", mlfqtickcount, (int)mlfqpath);
+        if(mlfq_slice_cnt >= mlfqinfo[p->mnode->level].slice || p->state != RUNNABLE){
+          if(p->mnode->exec_time >= mlfqinfo[p->mnode->level].allottime){
+            lowerlevel(p->mnode);
+            p->mnode->exec_time = 0;
+          }
+          else{
+            remove(p->mnode);
+            insertBefore(headers[p->mnode->level +1], p->mnode);
+          }
+          mlfq_slice_cnt = 0;
+          mlfqmin = 0;
+        }
+        if(mlfqtickcount == 100){
+          mlfqtickcount = 0;
+          priorityboost();
+        }
+      }
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-      // if(c->proc->state == RUNNABLE){
-      //   enqueue(&ptable.headers[1-ptable.lowside], c->proc);
-      // }
       c->proc = 0;
     }
     release(&ptable.lock);
+
   }
 }
 
@@ -486,9 +734,6 @@ sched(void)
     panic("sched running");
   if(readeflags()&FL_IF)
     panic("sched interruptible");
-  if(p->state == RUNNABLE){
-    enqueue(&ptable.headers[1-ptable.lowside], p);
-  }
   intena = mycpu()->intena;
   swtch(&p->context, mycpu()->scheduler);
   mycpu()->intena = intena;
@@ -572,14 +817,11 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan){
       p->state = RUNNABLE;
-      // totaldefaults++;
-      enqueue(&ptable.headers[0], p);
-      // redisttickets();
+      //p->path = getminpath();
     }
-  }
 }
 
 // Wake up all processes sleeping on chan.

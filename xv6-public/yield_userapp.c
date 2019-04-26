@@ -5,9 +5,9 @@
 int
 main(int argc, char *argv[])
 {
-	int i,j;
+	int i;
 	i = fork();
- 	j = fork();
+	cpu_share(20);
 while(1){
 	if(i > 0){
 		printf(1, "Parent\n");

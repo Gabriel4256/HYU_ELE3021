@@ -34,6 +34,16 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+
+struct mlfqnode
+{
+  struct mlfqnode* prev, *next;
+  struct proc* self;
+  int state; //0: unused, 1: used, -1: header
+  int level;
+  int exec_time; //executed time on this level
+};
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -49,10 +59,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  float stride;                // stride length of this process
-  float tickets;
-  int schedmode;               // 0: normal default state, 1: called cpu_share, 2: schedulerd by MLFQ  
-  int path; 		       // total accumulated path of the process by stride
+  int schedmode;
+  double path;
+  int tickets;
+  int fixedshare;
+  int pathlevel;
+  struct mlfqnode* mnode;
 };
 
 // Process memory is laid out contiguously, low addresses first:
