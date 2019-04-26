@@ -43,6 +43,7 @@ test_default(int dummy)
 				/* Time to terminate */
 				break;
 			}
+			yield();
 		}
 	}
 
@@ -87,6 +88,7 @@ test_stride(int portion)
 				/* Time to terminate */
 				break;
 			}
+			yield();
 		}
 	}
 
@@ -150,13 +152,13 @@ test_mlfq(int type)
 	}
 
 	/* Report */
-	if (type == MLFQ_LEVCNT || type == MLFQ_LEVCNT_YIELD ) {
-		printf(1, "MLfQ(%s), cnt : %d, lev[0] : %d, lev[1] : %d, lev[2] : %d\n",
-				type == MLFQ_LEVCNT ? "compute" : "yield", cnt, cnt_level[0], cnt_level[1], cnt_level[2]);
-	} else {
+	// if (type == MLFQ_LEVCNT || type == MLFQ_LEVCNT_YIELD ) {
+	// 	printf(1, "MLfQ(%s), cnt : %d, lev[0] : %d, lev[1] : %d, lev[2] : %d\n",
+	// 			type == MLFQ_LEVCNT ? "compute" : "yield", cnt, cnt_level[0], cnt_level[1], cnt_level[2]);
+	// } else {
 		printf(1, "MLfQ(%s), cnt : %d\n",
 				type == MLFQ_NONE ? "compute" : "yield", cnt);
-	}
+	//}
 
 	return;
 }
@@ -170,7 +172,7 @@ int
 main(int argc, char *argv[])
 {
 	int pid;
-	int i;
+	int i,j;
 
 	/* Workload list */
 	struct workload workloads[WORKLOAD_NUM] = {
@@ -179,13 +181,13 @@ main(int argc, char *argv[])
 		/* Process scheduled by Stride scheduler, use 15% of CPU resources */
 		{test_stride, 15},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-		{test_mlfq, MLFQ_LEVCNT},
+		{test_mlfq, MLFQ_YIELD},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-		{test_mlfq, MLFQ_NONE},
+		{test_mlfq, MLFQ_LEVCNT_YIELD},
 		/* Process scheduled by default scheduler */
 		{test_default, 0},
 	};
-
+for(j = 0; j<100; j++){
 	for (i = 0; i < WORKLOAD_NUM; i++) {
 		pid = fork();
 		if (pid > 0) {
@@ -203,11 +205,11 @@ main(int argc, char *argv[])
 			exit();
 		}
 	}
-
+	printf(1, "a\n");
 	for (i = 0; i < WORKLOAD_NUM; i++) {
 		wait();
 	}
-
+}
 	exit();
 }
 

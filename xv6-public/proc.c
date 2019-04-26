@@ -14,6 +14,8 @@ struct {
 
 
 ////////////////////
+#define TOTAL_TICKETS 10000
+
 struct procqueue
 { 
     int front, rear, size; 
@@ -21,14 +23,12 @@ struct procqueue
     struct proc* arr[NPROC]; 
 };
 
-// struct mlfqnode
-// {
-//   struct mlfqnode* prev, *next;
-//   struct proc* self;
-//   int state; //0: unused, 1: used, -1: header
-//   int level;
-//   int exec_time; //executed time on this level
-// } mlfqnodeslabs[NPROC + 4];
+struct vmp
+{
+  double stride, path;
+  struct proc* highpr;
+} vmp[2];
+
 struct mlfqnode mlfqnodeslabs[NPROC + 4];
 
 struct mlfqinfo
@@ -39,15 +39,10 @@ struct mlfqinfo
 
 struct mlfqnode* headers[4];
 
-int defaultcnt = 0;
-double defaultstride = 1;//스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 stride값
-double defaultpath = 0; //스케쥴링 시스템 콜을 호출하지 않은 프로세스들의 path값 중 최솟값
 const int mlfqstride = 5;
 double mlfqpath = 0;
-const int totaltickets = 10000;
 int totalfixedshare = 0;
 struct proc* fixedmin = 0;
-struct proc* defaultmin = 0;
 struct mlfqnode* mlfqmin = 0;;
 int mlfq_slice_cnt = 0;
 int mlfqtickcount = 0;
@@ -164,7 +159,7 @@ updatevals(){
   double min = -1;
   double min2 = -1;
   totalfixedshare = 0;
-  defaultmin = 0;
+  vmp[0].highpr = 0;
   fixedmin = 0;
   int mlfqcnt = 0;
   //acquire(&ptable.lock);
@@ -174,7 +169,7 @@ updatevals(){
         if(min2 == -1 || p->pathlevel< min2)
         {
           min2 = p->pathlevel;
-          defaultmin = p;
+          vmp[0].highpr = p;
         }
       }
       else if(p->schedmode == 1){
@@ -189,15 +184,15 @@ updatevals(){
       }
     }
   }
-  if(defaultmin){
-    defaultmin->path = defaultpath;
+  if(vmp[0].highpr){
+    vmp[0].highpr->path = vmp[0].path;
     // cprintf("default min exist!\n");
   }
   if(mlfqcnt){
-    defaultstride = (double)100 / (double)(80 - totalfixedshare);
+    vmp[0].stride = (double)100 / (double)(80 - totalfixedshare);
   }
   else{
-    defaultstride = (double)100 / (double)(100 - totalfixedshare);
+    vmp[0].stride = (double)100 / (double)(100 - totalfixedshare);
   }
   mlfqmin = choosebymlfq();
   //release(&ptable.lock);
@@ -224,8 +219,8 @@ getminpath(){
 int
 getminpathlevel()
 {
-  if(defaultmin)
-    return defaultmin->pathlevel;
+  if(vmp[0].highpr)
+    return vmp[0].highpr->pathlevel;
   return 0;
   
 }
@@ -242,7 +237,7 @@ cpu_share(int n)
   p = myproc();
   p->schedmode = 1;
   p->fixedshare = n;
-  p->tickets = totaltickets * n /100;
+  p->tickets = TOTAL_TICKETS * n /100;
   p->path = getminpath();
   totalfixedshare += n;
   //cprintf("topreoperjureiorpe: %d\n", totalfixedshare);
@@ -407,8 +402,8 @@ userinit(void)
   p->state = RUNNABLE;
   p->schedmode = 0;
   updatevals();
-  if(defaultmin)
-    p->pathlevel = defaultmin->pathlevel;
+  if(vmp[0].highpr)
+    p->pathlevel = vmp[0].highpr->pathlevel;
   else
     p->pathlevel = 0;
      //p->path = getminpath();
@@ -626,14 +621,14 @@ choosebystride(){
   updatevals();
   //double minpath;
   // struct proc* tmp;
-  if(defaultmin)
-    defaultmin->path = defaultpath;
+  if(vmp[0].highpr)
+    vmp[0].highpr->path = vmp[0].path;
   if(mlfqmin){
     mlfqmin->self->path = mlfqpath;
-    return getminproc(fixedmin, getminproc(mlfqmin->self, defaultmin));
+    return getminproc(fixedmin, getminproc(mlfqmin->self, vmp[0].highpr));
   }
   else{
-    return getminproc(fixedmin, defaultmin);
+    return getminproc(fixedmin, vmp[0].highpr);
   }
 }
 
@@ -673,9 +668,9 @@ scheduler(void)
       switchkvm();
 
       if(p->schedmode == 0){
-        defaultpath += defaultstride;
+        vmp[0].path += vmp[0].stride;
         p->pathlevel+=1;
-        // cprintf("default: %d\n", (int)(defaultpath));
+        // cprintf("default: %d\n", (int)(vmp[0].path));
       }
       else if(p->schedmode ==1){
         p->path += (double)(100/(double)p->fixedshare);
