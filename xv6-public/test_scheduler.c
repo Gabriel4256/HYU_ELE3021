@@ -12,7 +12,7 @@
 
 #define MLFQ_LEVEL		(3)	/* Number of level(priority) of MLFQ scheduler */
 
-#define WORKLOAD_NUM	(5) /* The number of workloads */
+#define WORKLOAD_NUM	(6) /* The number of workloads */
 
 
 
@@ -43,7 +43,7 @@ test_default(int dummy)
 				/* Time to terminate */
 				break;
 			}
-			// yield();
+			yield();
 		}
 	}
 
@@ -88,7 +88,7 @@ test_stride(int portion)
 				/* Time to terminate */
 				break;
 			}
-			// yield();
+			yield();
 		}
 	}
 
@@ -181,15 +181,15 @@ main(int argc, char *argv[])
 		/* Process scheduled by Stride scheduler, use 15% of CPU resources */
 		{test_stride, 15},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-		{test_mlfq, MLFQ_NONE},
+		{test_mlfq, MLFQ_YIELD},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-		{test_mlfq, MLFQ_LEVCNT},
+		{test_mlfq, MLFQ_LEVCNT_YIELD},
 		/* Process scheduled by default scheduler */
 		// {test_default, 0},
 		// {test_default, 0},
 		// {test_default, 0},
 		{test_default, 0},
-		// {test_default, 0},
+		{test_default, 0},
 	};
 for(j = 0; j<100; j++){
 	for (i = 0; i < WORKLOAD_NUM; i++) {
