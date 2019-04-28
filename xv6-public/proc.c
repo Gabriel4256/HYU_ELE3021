@@ -390,12 +390,13 @@ userinit(void)
   
   p->state = RUNNABLE;
   p->schedmode = DEFAULT;
+  p->path = getminpathlevel();
   updatevals();
-  if(defaultvmp.highpr)
-    p->path = defaultvmp.highpr->path;
-  else
-    p->path = 0;
-     //p->path = getminpath();
+  // if(defaultvmp.highpr)
+  //   p->path = defaultvmp.highpr->path;
+  // else
+  //   p->path = 0;
+  //    //p->path = getminpath();
 
   release(&ptable.lock);
 }
@@ -605,8 +606,6 @@ choosebymlfq(){
 struct proc*
 choosebystride(){
   updatevals();
-  //double minpath;
-  // struct proc* tmp;
   if(defaultvmp.highpr)
     defaultvmp.highpr->path = defaultvmp.path;
   if(mlfqvmp.highpr){
