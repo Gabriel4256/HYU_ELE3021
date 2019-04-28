@@ -16,17 +16,10 @@ struct {
 ////////////////////
 #define TOTAL_TICKETS 10000
 
-struct procqueue
-{ 
-    int front, rear, size; 
-    unsigned capacity; 
-    struct proc* arr[NPROC]; 
-};
-
 struct
 {
-double stride, path;
-struct proc* highpr;
+  double stride, path;
+  struct proc* highpr;
 } defaultvmp;
 
 struct
@@ -38,9 +31,6 @@ struct
 } mlfqvmp;
 
 struct mlfqnode mlfqnodeslabs[NPROC + 4];
-
-
-
 struct mlfqnode* headers[4];
 struct proc* fixedmin = 0;
 
@@ -48,7 +38,9 @@ double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
 
-void initmlfq(){
+void
+initmlfq()
+{
   int i;
   if(!headers[0]){
     for(i=0; i<4; i++){
@@ -79,7 +71,8 @@ void initmlfq(){
   }
 }
 
-struct mlfqnode* allocmlfqnode(struct proc* p)
+struct mlfqnode*
+allocmlfqnode(struct proc* p)
 {
   struct mlfqnode* m = 0;
   for(m = mlfqnodeslabs; m<&mlfqnodeslabs[NPROC+4]; m++){
@@ -93,7 +86,9 @@ struct mlfqnode* allocmlfqnode(struct proc* p)
   return m;
 }
 
-void insertafter(struct mlfqnode* target, struct mlfqnode* mover){
+void
+insertafter(struct mlfqnode* target, struct mlfqnode* mover)
+{
   mover->prev = target;
   if(target->next)
     target->next->prev = mover;
@@ -101,7 +96,9 @@ void insertafter(struct mlfqnode* target, struct mlfqnode* mover){
   target->next = mover;
 }
 
-void insertBefore(struct mlfqnode* target, struct mlfqnode* mover){
+void
+insertBefore(struct mlfqnode* target, struct mlfqnode* mover)
+{
   mover->next = target;
   if(target->prev)
     target->prev->next = mover;
@@ -109,7 +106,9 @@ void insertBefore(struct mlfqnode* target, struct mlfqnode* mover){
   target->prev = mover;
 }
 
-void remove(struct mlfqnode* m){
+void
+remove(struct mlfqnode* m)
+{
   if(m->prev)
     m->prev->next = m->next;
   if(m->next)
@@ -118,7 +117,9 @@ void remove(struct mlfqnode* m){
   m->prev = 0;
 }
 
-void delete(struct mlfqnode* m){
+void
+delete(struct mlfqnode* m)
+{
   remove(m);
   m->state = 0;
   m->level = 0;
@@ -126,7 +127,9 @@ void delete(struct mlfqnode* m){
   m->self = 0;
 }
 
-void lowerlevel(struct mlfqnode* m){
+void
+lowerlevel(struct mlfqnode* m)
+{
   if(m->level == 2)
     return;
   remove(m);
@@ -134,7 +137,9 @@ void lowerlevel(struct mlfqnode* m){
   m->level+=1;
 }
 
-void priorityboost(){
+void
+priorityboost()
+{
   struct mlfqnode* m;
   if(headers[0]){
     int i;
@@ -154,7 +159,8 @@ void priorityboost(){
 }
 
 void 
-updatevals(){
+updatevals()
+{
   // int lowcount = 0;
   struct proc* p = 0;
   double min = -1;
@@ -197,7 +203,8 @@ updatevals(){
 }
 
 double 
-min(double a, double b){
+min(double a, double b)
+{
   if(a > b)
     return b;
   else
@@ -205,7 +212,8 @@ min(double a, double b){
 }
 
 double
-getminpath(){
+getminpath()
+{
   //minimum path를 반환
   struct proc* p;
   p = choosebystride();
@@ -246,7 +254,9 @@ cpu_share(int n)
   return 0;
 }
 
-int run_MLFQ(){
+int
+run_MLFQ()
+{
   struct mlfqnode* m;
   if(!headers[0])
     initmlfq();
