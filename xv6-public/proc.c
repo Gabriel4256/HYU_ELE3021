@@ -644,15 +644,6 @@ scheduler(void)
     while((p = choosebystride()) !=0){
       if(p->state != RUNNABLE)
         continue;
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
       if(p->schedmode == DEFAULT){
         defaultvmp.path += defaultvmp.stride;
         p->path+=1;
@@ -685,6 +676,15 @@ scheduler(void)
           priorityboost();
         }
       }
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
