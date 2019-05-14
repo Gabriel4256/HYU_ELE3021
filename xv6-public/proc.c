@@ -37,6 +37,7 @@ struct proc* fixedmin = 0;
 double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
+uint nextthreadid = 0;
 
 void
 initmlfq()
@@ -893,4 +894,65 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
+{
+  struct proc *np;
+  struct proc *curproc = myproc();
+  int i = 0;
+  uint sz = 0;
+  uint sp = 0;
+  // pde_t *pgdir = 0;
+  //Allocate process
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+
+  np->pgdir = curproc->pgdir;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+  
+  //allocates two pages of memory, one for user stack and one for guard page
+  // if((sz = allocuvm(curproc->pgdir, sz, sz + 2*PGSIZE)) == 0)
+    // goto bad;
+  if (growproc(2 * PGSIZE) == -1)
+    goto bad;
+  np->sz = curproc->sz;
+  // curproc->sz = sz;
+  // //make guard page
+  clearpteu(np->pgdir, (char*)(sz - 2*PGSIZE));
+
+  // //put arguments and fake return address
+  sp = np->sz;
+  *((uint*)(sp - sizeof(uint))) = (uint)arg;
+  *((uint*)(sp - 2 * sizeof(uint))) = 0xffffffff;
+  sp-= 2 * sizeof(uint);
+  
+  np->tf->esp = sp;
+  np->tf->ebp = sp;
+  np->tf->eip = (uint)start_routine;  
+
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+  *thread  = nextthreadid++;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+  np->schedmode = 0;
+  np->pathlevel = getminpathlevel();
+
+  release(&ptable.lock);
+  return 0;
+
+  bad:
+    return -1;
+
 }

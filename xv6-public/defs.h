@@ -125,6 +125,9 @@ int		        cpu_share(int);
 int             run_MLFQ();
 int             getlev(void);
 
+//thread related syscalls
+int             thread_create(thread_t* thread, void* (*start_routine)(void *), void*);
+
 // swtch.S
 void            swtch(struct context**, struct context*);
 

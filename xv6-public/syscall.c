@@ -109,6 +109,7 @@ extern int sys_yield(void);
 extern int sys_cpu_share(void);
 extern int sys_run_MLFQ(void);
 extern int sys_getlev(void);
+extern int sys_thread_create(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -137,7 +138,8 @@ static int (*syscalls[])(void) = {
 [SYS_yield] sys_yield,
 [SYS_cpu_share] sys_cpu_share,
 [SYS_run_MLFQ] sys_run_MLFQ,
-[SYS_getlev] sys_getlev
+[SYS_getlev] sys_getlev,
+[SYS_thread_create] sys_thread_create
 };
 
 void

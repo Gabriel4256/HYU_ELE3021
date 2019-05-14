@@ -29,6 +29,7 @@ int yield(void);
 int cpu_share(int);
 int run_MLFQ(void);
 int getlev(void);
+int thread_create(uint* thread, void * (*start_routine)(void *), void * arg);
 
 // ulib.c
 int stat(const char*, struct stat*);

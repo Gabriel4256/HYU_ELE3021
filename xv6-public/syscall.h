@@ -26,3 +26,4 @@
 #define SYS_cpu_share 25
 #define SYS_run_MLFQ 26
 #define SYS_getlev 27
+#define SYS_thread_create 28
