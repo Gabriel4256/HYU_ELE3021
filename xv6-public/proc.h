@@ -64,7 +64,10 @@ struct proc {
   int fixedshare;
   int pathlevel;
   struct mlfqnode* mnode;
-  void* stack; 
+  uint originalbase;
+  thread_t tid;
+  void* retval;
+  struct proc* master;
 };
 
 typedef uint thread_t;

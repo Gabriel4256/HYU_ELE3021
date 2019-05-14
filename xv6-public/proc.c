@@ -37,7 +37,7 @@ struct proc* fixedmin = 0;
 double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
-uint nextthreadid = 0;
+uint nexttid = 0;
 
 void
 initmlfq()
@@ -801,7 +801,6 @@ sleep(void *chan, struct spinlock *lk)
   p->state = SLEEPING;
 
   sched();
-
   // Tidy up.
   p->chan = 0;
 
@@ -912,7 +911,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 
 
   np->pgdir = curproc->pgdir;
-  np->parent = curproc;
+  np->master = curproc;
   *np->tf = *curproc->tf;
   
   //allocates two pages of memory, one for user stack and one for guard page
@@ -933,7 +932,8 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   
   np->tf->esp = sp;
   np->tf->ebp = sp;
-  np->tf->eip = (uint)start_routine;  
+  np->tf->eip = (uint)start_routine;
+  np->originalbase = sp - 2 * PGSIZE;
 
   for(i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
@@ -941,7 +941,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->cwd = idup(curproc->cwd);
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-  *thread  = nextthreadid++;
+  *thread  = nexttid++;
 
   acquire(&ptable.lock);
 
@@ -960,11 +960,72 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 void
 thread_exit(void *retval)
 {
+  struct proc *curproc = myproc();
+  int fd;
+ // Close all open files.
+  for(fd = 0; fd < NOFILE; fd++){
+    if(curproc->ofile[fd]){
+      fileclose(curproc->ofile[fd]);
+      curproc->ofile[fd] = 0;
+    }
+  }
 
+  begin_op();
+  iput(curproc->cwd);
+  end_op();
+  curproc->cwd = 0;
+  curproc->retval = retval;
+  //cprintf("retval: %d\n", (int)retval);
+
+  acquire(&ptable.lock);
+  wakeup1(curproc->master);
+  curproc->state = ZOMBIE;
+  sched();
+  panic("zombie exit");
 }
 
 int
 thread_join(thread_t thread, void **retval)
 {
+  struct proc *curproc = myproc();
+  struct proc *p;
+  int found = 0;
+  
+  acquire(&ptable.lock);
+for(;;){
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->master != curproc)
+      continue;
+    if(p->tid == thread){
+      found = 1;
+      if(p->state == ZOMBIE){
+        //Found One
+        cprintf("FOund!!\n");
+        kfree(p->kstack);
+        p->kstack = 0;
+        p->pid = 0;
+        p->parent = 0;
+        p->master = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+        *retval = p->retval;
+        p->retval = 0;
+        deallocuvm(p->pgdir, p->sz, p->originalbase);
+        release(&ptable.lock);
+        return 0;
+      }
+    }
+
+
+  }
+  if(!found || curproc->killed){
+    release(&ptable.lock);
+    return -1;
+  }
+  // Wait for the worker thread to exit
+  cprintf("I'm gonna slepp\n");
+  sleep(curproc, &ptable.lock);
+}
   return 0;
 }
