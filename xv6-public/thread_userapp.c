@@ -7,21 +7,22 @@ int result = 0;
 
 void *thread_main(void *arg)
 {
-	// int i;
+	int i;
 	// double result=0.0;
 
 	printf(1, "therad: %d, %d\n", (int)arg, getpid());
 
-	while (1)
-	{
-        	// for (i=0; i < 1000000; i++)
-   		// {
+	// while (1)
+	// {
+        	for (i=0; i < 1000000; i++)
+   		{
      			result = result + 1;
-   		// }
+   		}
    		printf(1, "thread: %d, result = %d\n", (int)arg, (int)result);
-	}
+	// }
 
-	//pthread_exit((void *) 0);
+	pthread_exit((void *) 1000);
+	return 0;
 }
 
 int

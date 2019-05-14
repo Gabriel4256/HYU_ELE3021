@@ -110,6 +110,8 @@ extern int sys_cpu_share(void);
 extern int sys_run_MLFQ(void);
 extern int sys_getlev(void);
 extern int sys_thread_create(void);
+extern int sys_thread_exit(void);
+extern int sys_thread_join(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -139,7 +141,9 @@ static int (*syscalls[])(void) = {
 [SYS_cpu_share] sys_cpu_share,
 [SYS_run_MLFQ] sys_run_MLFQ,
 [SYS_getlev] sys_getlev,
-[SYS_thread_create] sys_thread_create
+[SYS_thread_create] sys_thread_create,
+[SYS_thread_exit] sys_thread_exit,
+[SYS_thread_join] sys_thread_join
 };
 
 void

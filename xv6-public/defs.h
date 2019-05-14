@@ -126,7 +126,9 @@ int             run_MLFQ();
 int             getlev(void);
 
 //thread related syscalls
-int             thread_create(thread_t* thread, void* (*start_routine)(void *), void*);
+int             thread_create(thread_t* , void* (*start_routine)(void *), void*);
+void            thread_exit(void*);
+int             thread_join(thread_t, void**);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
