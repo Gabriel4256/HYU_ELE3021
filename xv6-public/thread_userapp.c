@@ -35,6 +35,11 @@ main(int argc, char *argv[])
     	thread_create(&thread[i], &thread_main, (void *)i);
 		for(i=9; i>-1; i--){
 			thread_join(thread[i], (void**)&ret);
+			thread_create(&thread[i], &thread_main, (void*)i);
+			printf(1, "result: %d\n", ret);
+		}
+		for(i=9; i>-1; i--){
+			thread_join(thread[i], (void**)&ret);
 			printf(1, "result: %d\n", ret);
 		}
 		return 0;

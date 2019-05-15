@@ -68,6 +68,8 @@ struct proc {
   thread_t tid;
   void* retval;
   struct proc* master;
+  uint emptystacks[NPROC];
+  int emptystackcnt;
 };
 
 typedef uint thread_t;

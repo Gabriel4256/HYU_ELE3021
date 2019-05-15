@@ -914,13 +914,23 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->master = curproc;
   *np->tf = *curproc->tf;
   
+  sz = curproc->sz;
+  if(curproc->emptystackcnt > 0){
+    sz = curproc->emptystacks[--curproc->emptystackcnt];
+    cprintf("Found empty spaces: %d\n", (int)sz);
+  }
+  else{
+    cprintf("Create new Stack space: %d\n", (int)curproc->sz);
+  }
   //allocates two pages of memory, one for user stack and one for guard page
-  // if((sz = allocuvm(curproc->pgdir, sz, sz + 2*PGSIZE)) == 0)
-    // goto bad;
-  if (growproc(2 * PGSIZE) == -1)
+  if((sz = allocuvm(curproc->pgdir, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
-  np->sz = curproc->sz;
-  // curproc->sz = sz;
+  if(curproc->sz < sz)
+    curproc->sz = sz;
+  np->sz = sz;
+  np->originalbase = sz - 2 * PGSIZE;
+  switchuvm(curproc);
+
   // //make guard page
   clearpteu(np->pgdir, (char*)(sz - 2*PGSIZE));
 
@@ -931,9 +941,8 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   sp-= 2 * sizeof(uint);
   
   np->tf->esp = sp;
-  np->tf->ebp = sp;
+  np->tf->ebp = sz;
   np->tf->eip = (uint)start_routine;
-  np->originalbase = sp - 2 * PGSIZE;
 
   for(i = 0; i < NOFILE; i++)
     if(curproc->ofile[i])
@@ -1012,6 +1021,9 @@ for(;;){
         *retval = p->retval;
         p->retval = 0;
         deallocuvm(p->pgdir, p->sz, p->originalbase);
+        if(p->sz < curproc->sz){
+          curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
+        }
         release(&ptable.lock);
         return 0;
       }
