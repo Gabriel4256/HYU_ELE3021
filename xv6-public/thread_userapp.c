@@ -2,7 +2,8 @@
 #include "stat.h"
 #include "user.h"
 
-thread_t thread[10];
+thread_t thread[15];
+thread_t tl = 150;
 int result = 0;
 
 void *thread_main(void *arg)
@@ -31,16 +32,21 @@ main(int argc, char *argv[])
 {
     int i = 10;
 		int ret;
-		for(i=0; i<10; i++)
-    	thread_create(&thread[i], &thread_main, (void *)i);
-		for(i=9; i>-1; i--){
-			thread_join(thread[i], (void**)&ret);
-			thread_create(&thread[i], &thread_main, (void*)i);
-			printf(1, "result: %d\n", ret);
+		// thread_t* tmp;
+		for(i=0; i<10; i++){
+    	thread_create(&(thread[i]), &thread_main, (void *)i);
+			printf(1, "tid: %d\n", (int)(thread[i]));
 		}
+		// thread_create(&tl, &thread_main, (void*)i);
+		// tmp = &tl;
+		// *tmp = 300;
+		// printf(1, "tid: %d\n", (int)tl);
+		thread_join(thread[9], (void**)&ret);
+		thread_create(&thread[9], &thread_main, (void *)i);
+		// thread_create(&thread[11], &thread_main, (void*)i);
 		for(i=9; i>-1; i--){
-			thread_join(thread[i], (void**)&ret);
-			printf(1, "result: %d\n", ret);
+			// thread_join(thread[i], (void**)&ret);
+			// printf(1, "result: %d\n", ret);
 		}
 		return 0;
 }

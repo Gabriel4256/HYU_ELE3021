@@ -59,15 +59,15 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  int schedmode;
-  double path;
-  int fixedshare;
-  int pathlevel;
-  struct mlfqnode* mnode;
-  uint originalbase;
-  thread_t tid;
+  int schedmode;               // Scheduling mode (0: default, 1 : fixed share, 2 : mlfq)
+  double path;                 // path used in stride scheduling     
+  int fixedshare;              // used only in fixed share scheduling mode
+  int pathlevel;               // used only in default scheduling mode
+  struct mlfqnode* mnode;      // pointer for mlfq node used in mlfq scheduling 
+  uint originalbase;           
+  thread_t tid;                // thread id, if it's not thread, don't use this value
   void* retval;
-  struct proc* master;
+  struct proc* master;         
   uint emptystacks[NPROC];
   int emptystackcnt;
 };

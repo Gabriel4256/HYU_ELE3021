@@ -927,6 +927,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     goto bad;
   if(curproc->sz < sz)
     curproc->sz = sz;
+
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
   switchuvm(curproc);
@@ -950,7 +951,8 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->cwd = idup(curproc->cwd);
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-  *thread  = nexttid++;
+  *thread = nexttid++;
+  np->tid = *thread;
 
   acquire(&ptable.lock);
 
@@ -1009,7 +1011,7 @@ for(;;){
       found = 1;
       if(p->state == ZOMBIE){
         //Found One
-        cprintf("FOund!!\n");
+        cprintf("Found!! : %d has been delocated\n", p->originalbase);
         kfree(p->kstack);
         p->kstack = 0;
         p->pid = 0;
@@ -1023,6 +1025,9 @@ for(;;){
         deallocuvm(p->pgdir, p->sz, p->originalbase);
         if(p->sz < curproc->sz){
           curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
+        }
+        else{
+          curproc->sz -= 2 * PGSIZE;
         }
         release(&ptable.lock);
         return 0;

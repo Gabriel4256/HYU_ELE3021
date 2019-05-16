@@ -127,17 +127,16 @@ sys_getlev(void)
 int
 sys_thread_create(void)
 {
-  thread_t i;
+  thread_t* i;
   void *arg;
   void* (* fcn)(void*);
-  if(argint(0, (int*)&i) < 0)
+  if(argptr(0, (void*)&i, sizeof(i)) < 0)
     return -1;
   if(argptr(1, (void*)&fcn, sizeof(fcn)) < 0)
     return -1;
   if(argptr(2, (void*)&arg, sizeof(arg)) < 0)
     return -1;
-  
-  return thread_create(&i, fcn, arg);
+  return thread_create(i, fcn, arg);
 }
 
 int
