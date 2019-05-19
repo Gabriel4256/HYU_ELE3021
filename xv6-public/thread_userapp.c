@@ -15,7 +15,7 @@ void *thread_main(void *arg)
 
 	// while (1)
 	// {
-        	for (i=0; i < 10000000* (10 - (int)arg); i++)
+        	for (i=0; i < 1000; i++)
    		{
      			result++;
    		}
@@ -41,7 +41,9 @@ main(int argc, char *argv[])
 		// tmp = &tl;
 		// *tmp = 300;
 		// printf(1, "tid: %d\n", (int)tl);
-		thread_join(thread[9], (void**)&ret);
+		for(i=0; i<10; i++){
+			thread_join(thread[i], (void**)&ret);
+		}
 		thread_create(&thread[9], &thread_main, (void *)i);
 		// thread_create(&thread[11], &thread_main, (void*)i);
 		for(i=9; i>-1; i--){

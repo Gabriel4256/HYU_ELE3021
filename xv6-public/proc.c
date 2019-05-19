@@ -37,7 +37,7 @@ struct proc* fixedmin = 0;
 double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
-uint nexttid = 0;
+uint nexttid = 1;
 
 void
 initmlfq()
@@ -285,6 +285,7 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
+  cprintf("ASDFfdsfds\n");
   initlock(&ptable.lock, "ptable");
 }
 
@@ -502,9 +503,45 @@ exit(void)
   struct proc *curproc = myproc();
   struct proc *p;
   int fd;
+  int found = 0;
 
   if(curproc == initproc)
     panic("init exiting");
+
+  acquire(&ptable.lock);
+
+  // If there is worker thread not joined by master thread,
+  // then terminate it and deallocate resources
+  for(;;){
+    found = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->master == curproc){
+        if(p->state == ZOMBIE){
+          kfree(p->kstack);
+          p->kstack = 0;
+          p->pid = 0;
+          p->parent = 0;
+          p->master = 0;
+          p->name[0] = 0;
+          p->killed = 0;
+          p->state = UNUSED;
+          deallocuvm(p->pgdir, p->sz, p->originalbase);
+        }
+        else{
+          found = 1;
+          p->killed = 1;
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+          //wakeup1(p);
+        }
+      }
+    }
+    if(!found){
+      release(&ptable.lock);
+      break;
+    }
+    sleep(curproc, &ptable.lock);
+  }
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
@@ -522,7 +559,12 @@ exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  wakeup1(curproc->parent);
+  if(curproc->parent)
+    wakeup1(curproc->parent);
+
+  //master thread might be sleeping
+  if(curproc->master)
+    wakeup1(curproc->master);
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
@@ -895,6 +937,7 @@ procdump(void)
   }
 }
 
+// Craete new thread of the calling process
 int
 thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 {
@@ -903,33 +946,34 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   int i = 0;
   uint sz = 0;
   uint sp = 0;
-  // pde_t *pgdir = 0;
-  //Allocate process
+  
+  //Allocate proc struct & kernel spaces
   if((np = allocproc()) == 0){
     return -1;
   }
-
-
-  np->pgdir = curproc->pgdir;
-  np->master = curproc;
-  *np->tf = *curproc->tf;
+  --nextpid;
   
   sz = curproc->sz;
   if(curproc->emptystackcnt > 0){
+    // Found empty stack space
     sz = curproc->emptystacks[--curproc->emptystackcnt];
-    cprintf("Found empty spaces: %d\n", (int)sz);
   }
-  else{
-    cprintf("Create new Stack space: %d\n", (int)curproc->sz);
-  }
-  //allocates two pages of memory, one for user stack and one for guard page
+
+  //allocates two pages of memory, one for thread user stack and one for guard page
   if((sz = allocuvm(curproc->pgdir, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
   if(curproc->sz < sz)
     curproc->sz = sz;
 
+  //share page table of master thread
+  np->pgdir = curproc->pgdir;
+
+  //set other values
+  np->master = curproc;
+  *np->tf = *curproc->tf;
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
+  np->pid = curproc->pid;
   switchuvm(curproc);
 
   // //make guard page
@@ -965,15 +1009,17 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 
   bad:
     return -1;
-
 }
 
+//exit the calling thread
+//return value is stored in the struct proc and passed to master by calling thread_join
 void
 thread_exit(void *retval)
 {
   struct proc *curproc = myproc();
   int fd;
- // Close all open files.
+
+  // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
     if(curproc->ofile[fd]){
       fileclose(curproc->ofile[fd]);
@@ -985,16 +1031,22 @@ thread_exit(void *retval)
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
+
+  // Save return value in the proc struct
   curproc->retval = retval;
-  //cprintf("retval: %d\n", (int)retval);
 
   acquire(&ptable.lock);
   wakeup1(curproc->master);
+
+  // Jump into the scheduler, never to return
   curproc->state = ZOMBIE;
   sched();
   panic("zombie exit");
 }
 
+
+// Wait for the thread to call thread_exit.
+// And when the thread is terminated, clean the resources fot it.
 int
 thread_join(thread_t thread, void **retval)
 {
@@ -1010,8 +1062,8 @@ for(;;){
     if(p->tid == thread){
       found = 1;
       if(p->state == ZOMBIE){
-        //Found One
-        cprintf("Found!! : %d has been delocated\n", p->originalbase);
+        // If the thread has been terminated already,
+        // Then clean the resources allocated to the thread.
         kfree(p->kstack);
         p->kstack = 0;
         p->pid = 0;
@@ -1020,8 +1072,6 @@ for(;;){
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
-        *retval = p->retval;
-        p->retval = 0;
         deallocuvm(p->pgdir, p->sz, p->originalbase);
         if(p->sz < curproc->sz){
           curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
@@ -1029,19 +1079,22 @@ for(;;){
         else{
           curproc->sz -= 2 * PGSIZE;
         }
+
+        //pass return value of the thread to the argument retval
+        *retval = p->retval;
+        p->retval = 0;
         release(&ptable.lock);
         return 0;
       }
     }
-
-
   }
   if(!found || curproc->killed){
+    // Not found the thread of such a id, or master thread has already been killed.
     release(&ptable.lock);
     return -1;
   }
+
   // Wait for the worker thread to exit
-  cprintf("I'm gonna slepp\n");
   sleep(curproc, &ptable.lock);
 }
   return 0;

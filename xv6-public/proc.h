@@ -71,8 +71,6 @@ struct proc {
   uint emptystacks[NPROC];
   int emptystackcnt;
 };
-
-typedef uint thread_t;
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss
