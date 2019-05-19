@@ -285,7 +285,6 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
-  cprintf("ASDFfdsfds\n");
   initlock(&ptable.lock, "ptable");
 }
 
