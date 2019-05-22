@@ -23,6 +23,7 @@ void *thread_main(void *arg)
 	// }
 	if((int)arg == 4){
 		//sleep(1000);
+		exit();
 	}
 	thread_exit((void *) 3000);
 	// while(1){}
@@ -33,7 +34,7 @@ int
 main(int argc, char *argv[])
 {
     int i = 10;
-		int ret;
+		// int ret = 0;
 		// thread_t* tmp;
 		for(i=0; i<10; i++){
     	thread_create(&(thread[i]), &thread_main, (void *)i);
@@ -44,7 +45,7 @@ main(int argc, char *argv[])
 		// *tmp = 300;
 		// printf(1, "tid: %d\n", (int)tl);
 		for(i=0; i<10; i++){
-			thread_join(thread[i], (void**)&ret);
+			//thread_join(thread[i], (void**)&ret);
 		}
 		// thread_create(&thread[9], &thread_main, (void *)i);
 		// thread_create(&thread[11], &thread_main, (void*)i);

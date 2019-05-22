@@ -743,21 +743,7 @@ scheduler(void)
       // then deallocate the resources.
       for(t = ptable.proc; t < &ptable.proc[NPROC]; t++){
         if(t->master == p && t->killed && t->state == ZOMBIE){
-          kfree(p->kstack);
-          t->kstack = 0;
-          t->pid = 0;
-          t->parent = 0;
-          t->master = 0;
-          t->name[0] = 0;
-          t->killed = 0;
-          t->state = UNUSED;
-          deallocuvm(t->pgdir, t->sz, t->originalbase);
-          if(t->sz < p->sz){
-            p->emptystacks[p->emptystackcnt++] = t->originalbase;
-          }
-          else{
-            p->sz -= 2 * PGSIZE;
-          }   
+          dealloc_thread(t);
         }
       }
 
@@ -1028,15 +1014,17 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->tid = *thread;
   
   //thread Linkedlist operation
-  if(curproc->prev_thread){
+  if(curproc->next_thread){
     curproc->prev_thread->next_thread = np;
+    np->prev_thread = curproc->prev_thread;
+    curproc->prev_thread = np;
   }
-  if(!curproc->next_thread)
+  else{
     curproc->next_thread = np;
-  np->prev_thread = curproc->prev_thread; 
-  curproc->prev_thread = np;
+    curproc->prev_thread = np;
+    np->prev_thread = curproc;
+  }
   np->next_thread = 0;
-
 
   acquire(&ptable.lock);
 
