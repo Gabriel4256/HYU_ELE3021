@@ -37,6 +37,7 @@ struct proc* fixedmin = 0;
 double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
+int dealloc_thread(struct proc*);
 uint nexttid = 1;
 
 void
@@ -516,15 +517,7 @@ exit(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->master == curproc){
         if(p->state == ZOMBIE){
-          kfree(p->kstack);
-          p->kstack = 0;
-          p->pid = 0;
-          p->parent = 0;
-          p->master = 0;
-          p->name[0] = 0;
-          p->killed = 0;
-          p->state = UNUSED;
-          deallocuvm(p->pgdir, p->sz, p->originalbase);
+          dealloc_thread(p);
         }
         else{
           found = 1;
@@ -532,7 +525,6 @@ exit(void)
           p->master = curproc;
           if(p->state == SLEEPING)
             p->state = RUNNABLE;
-          //wakeup1(p);
         }
       }
     }
@@ -543,9 +535,10 @@ exit(void)
     sleep(curproc, &ptable.lock);
   }
 
-  if(curproc->parent){
+  if(curproc->master){
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      p->killed = 1;
+      if(p->master == curproc->master)
+        p->killed = 1;
     }
   }
   // Close all open files.
@@ -564,10 +557,8 @@ exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  if(curproc->parent){
+  if(curproc->parent)
     wakeup1(curproc->parent);
-    cprintf("waked parent, tid: %d\n", curproc->parent->tid);
-  }
 
   //master thread might be sleeping
   if(curproc->master)
@@ -769,6 +760,8 @@ scheduler(void)
           }   
         }
       }
+
+
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -913,11 +906,18 @@ int
 kill(int pid)
 {
   struct proc *p;
-
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
       p->killed = 1;
+      if(p->master){
+        // If p is worker thread, then increase kill cnt
+        p->master->thread_kill_cnt++;
+        if(p->master->thread_kill_cnt == 2){
+          
+        }
+      }
+
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
         p->state = RUNNABLE;
@@ -980,7 +980,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   if((np = allocproc()) == 0){
     return -1;
   }
-  --nextpid;
+  // --nextpid;
   
   sz = curproc->sz;
   if(curproc->emptystackcnt > 0){
@@ -1002,7 +1002,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   *np->tf = *curproc->tf;
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
-  np->pid = curproc->pid;
+  // np->pid = curproc->pid;
   switchuvm(curproc);
 
   // //make guard page
@@ -1026,6 +1026,17 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
   *thread = nexttid++;
   np->tid = *thread;
+  
+  //thread Linkedlist operation
+  if(curproc->prev_thread){
+    curproc->prev_thread->next_thread = np;
+  }
+  if(!curproc->next_thread)
+    curproc->next_thread = np;
+  np->prev_thread = curproc->prev_thread; 
+  curproc->prev_thread = np;
+  np->next_thread = 0;
+
 
   acquire(&ptable.lock);
 
@@ -1063,7 +1074,7 @@ thread_exit(void *retval)
 
   // Save return value in the proc struct
   curproc->retval = retval;
-  cprintf("retval: %d\n", (int)(retval));
+  // cprintf("retval: %d\n", (int)(retval));
   acquire(&ptable.lock);
   wakeup1(curproc->master);
   wakeup1(curproc->parent);
@@ -1085,47 +1096,106 @@ thread_join(thread_t thread, void **retval)
   int found = 0;
   
   acquire(&ptable.lock);
-for(;;){
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->master != curproc)
-      continue;
-    if(p->tid == thread){
-      found = 1;
-      if(p->state == ZOMBIE){
-        // If the thread has been terminated already,
-        // Then clean the resources allocated to the thread.
-        kfree(p->kstack);
-        p->kstack = 0;
-        p->pid = 0;
-        p->parent = 0;
-        p->master = 0;
-        p->name[0] = 0;
-        p->killed = 0;
-        p->state = UNUSED;
-        deallocuvm(p->pgdir, p->sz, p->originalbase);
-        if(p->sz < curproc->sz){
-          curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
-        }
-        else{
-          curproc->sz -= 2 * PGSIZE;
-        }
+  for(;;){
+    p = curproc->next_thread;
+    while(p){
+      cprintf("found tid: %d\n", (int)p->tid);
+      if(p->tid == thread){
+        found = 1;
+        if(p->state == ZOMBIE){
+          dealloc_thread(p);
 
-        //pass return value of the thread to the argument retval
-        *retval = p->retval;
-        p->retval = 0;
-        release(&ptable.lock);
-        return 0;
+          //pass return value of the thread to the argument retval
+          *retval = p->retval;
+          p->retval = 0;
+          release(&ptable.lock);
+          return 0;
+        }
       }
+      p = p->next_thread;
     }
-  }
-  if(!found || curproc->killed){
-    // Not found the thread of such a id, or master thread has already been killed.
-    release(&ptable.lock);
-    return -1;
-  }
+    if(!found || curproc->killed){
+      // Not found the thread of such a id, or master thread has already been killed.
+      release(&ptable.lock);
+      return -1;
+    } 
 
-  // Wait for the worker thread to exit
-  sleep(curproc, &ptable.lock);
+    // Wait for the worker thread to exit
+    sleep(curproc, &ptable.lock);
+  }
+//   acquire(&ptable.lock);
+// for(;;){
+//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+//     if(p->master != curproc)
+//       continue;
+//     if(p->tid == thread){
+//       found = 1;
+//       if(p->state == ZOMBIE){
+//         // If the thread has been terminated already,
+//         // Then clean the resources allocated to the thread.
+//         // kfree(p->kstack);
+//         // p->kstack = 0;
+//         // p->pid = 0;
+//         // p->parent = 0;
+//         // p->master = 0;
+//         // p->name[0] = 0;
+//         // p->killed = 0;
+//         // p->state = UNUSED;
+//         // deallocuvm(p->pgdir, p->sz, p->originalbase);
+//         // if(p->sz < curproc->sz){
+//         //   curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
+//         // }
+//         // else{
+//         //   curproc->sz -= 2 * PGSIZE;
+//         // }
+//         dealloc_thread(p);
+
+//         //pass return value of the thread to the argument retval
+//         *retval = p->retval;
+//         p->retval = 0;
+//         release(&ptable.lock);
+//         return 0;
+//       }
+//     }
+//   }
+//   if(!found || curproc->killed){
+//     // Not found the thread of such a id, or master thread has already been killed.
+//     release(&ptable.lock);
+//     return -1;
+//   }
+
+//   // Wait for the worker thread to exit
+//   sleep(curproc, &ptable.lock);
+// }
+  return 0;
 }
+
+int
+dealloc_thread(struct proc* worker){
+  struct proc* master;
+  if(!worker->master)
+    return -1;
+  master = worker->master;
+  kfree(worker->kstack);
+  worker->kstack = 0;
+  worker->pid = 0;
+  worker->parent = 0;
+  worker->master = 0;
+  worker->name[0] = 0;
+  worker->killed = 0;
+  worker->state = UNUSED;
+  deallocuvm(worker->pgdir, worker->sz, worker->originalbase);
+  if(worker->sz < master->sz){
+    master->emptystacks[master->emptystackcnt++] = worker->originalbase;
+  }
+  else{
+    master->sz -= 2 * PGSIZE;
+  }
+  
+  //delete from the thread linked list
+  worker->prev_thread->next_thread = worker->next_thread;
+  if(worker->next_thread)
+    worker->next_thread->prev_thread = worker->prev_thread;
+
   return 0;
 }

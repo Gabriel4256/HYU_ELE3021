@@ -18,6 +18,29 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
   struct proc *curproc = myproc();
+  // struct proc* p;
+
+  // for(p = ptable.proc; p < &ptable.proc[NPROC]; t++){
+  //     if(p->master == curproc){
+  //       kfree(p->kstack);
+  //       t->kstack = 0;
+  //       t->pid = 0;
+  //       t->parent = 0;
+  //       t->master = 0;
+  //       t->name[0] = 0;
+  //       t->killed = 0;
+  //       t->state = UNUSED;
+  //       deallocuvm(t->pgdir, t->sz, t->originalbase);
+  //       if(t->sz < p->sz){
+  //         p->emptystacks[p->emptystackcnt++] = t->originalbase;
+  //       }
+  //       else{
+  //         p->sz -= 2 * PGSIZE;
+  //     }   
+  //   }
+  // }
+
+  
 
   begin_op();
 

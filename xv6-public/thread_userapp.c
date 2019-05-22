@@ -22,7 +22,7 @@ void *thread_main(void *arg)
    		//printf(1, "thread: %d, result = %d\n", (int)arg, (int)result);
 	// }
 	if((int)arg == 4){
-		// exit();
+		//sleep(1000);
 	}
 	thread_exit((void *) 3000);
 	// while(1){}
