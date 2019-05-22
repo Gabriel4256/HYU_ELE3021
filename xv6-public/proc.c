@@ -512,6 +512,29 @@ exit(void)
 
   // If there is worker thread not joined by master thread,
   // then terminate it and deallocate resources
+  // if(curproc->next_thread){
+  //   for(;;){
+  //     p = curproc->next_thread;
+  //     found = 0;
+  //     while(p){
+  //       if(p->state == ZOMBIE)
+  //         dealloc_thread(p);
+  //       else{
+  //         found = 1;
+  //         p->killed = 1;
+  //         if(p->state == SLEEPING)
+  //           p->state = RUNNABLE;
+  //       }
+  //       p = p->next_thread;
+  //     }
+  //     if(!found){
+  //       release(&ptable.lock);
+  //       break;
+  //     }
+  //     sleep(curproc, &ptable.lock);
+  //   }
+  // }
+
   for(;;){
     found = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
@@ -535,7 +558,7 @@ exit(void)
     sleep(curproc, &ptable.lock);
   }
 
-  if(curproc->master){
+  if(curproc->master && !curproc->killed){
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->master == curproc->master)
         p->killed = 1;
@@ -895,12 +918,20 @@ kill(int pid)
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
+      cprintf("KILL %d\n", p->pid);
       p->killed = 1;
       if(p->master){
         // If p is worker thread, then increase kill cnt
         p->master->thread_kill_cnt++;
         if(p->master->thread_kill_cnt == 2){
-          
+          // If kill count is 2, then kill all the worker threads
+          p = p->master->next_thread;
+          p->master->thread_kill_cnt = 0;
+          while(p){
+            p->killed = 1;
+            p = p->next_thread;
+          }
+          break;
         }
       }
 

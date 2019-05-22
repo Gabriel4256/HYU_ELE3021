@@ -23,10 +23,10 @@ void *thread_main(void *arg)
 	// }
 	if((int)arg == 4){
 		//sleep(1000);
-		exit();
+		// exit();
 	}
+	while(1){}
 	thread_exit((void *) 3000);
-	// while(1){}
 	return 0;
 }
 
@@ -44,6 +44,8 @@ main(int argc, char *argv[])
 		// tmp = &tl;
 		// *tmp = 300;
 		// printf(1, "tid: %d\n", (int)tl);
+		kill(4);
+		kill(5);
 		for(i=0; i<10; i++){
 			//thread_join(thread[i], (void**)&ret);
 		}
