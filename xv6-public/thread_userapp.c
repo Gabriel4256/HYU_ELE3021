@@ -21,7 +21,9 @@ void *thread_main(void *arg)
    		}
    		//printf(1, "thread: %d, result = %d\n", (int)arg, (int)result);
 	// }
-
+	if((int)arg == 4){
+		// exit();
+	}
 	thread_exit((void *) 3000);
 	// while(1){}
 	return 0;
@@ -44,12 +46,13 @@ main(int argc, char *argv[])
 		for(i=0; i<10; i++){
 			thread_join(thread[i], (void**)&ret);
 		}
-		thread_create(&thread[9], &thread_main, (void *)i);
+		// thread_create(&thread[9], &thread_main, (void *)i);
 		// thread_create(&thread[11], &thread_main, (void*)i);
 		for(i=9; i>-1; i--){
 			// thread_join(thread[i], (void**)&ret);
 			// printf(1, "result: %d\n", ret);
 		}
+		while(1){};
 		return 0;
 }
 

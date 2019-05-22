@@ -529,6 +529,7 @@ exit(void)
         else{
           found = 1;
           p->killed = 1;
+          p->master = curproc;
           if(p->state == SLEEPING)
             p->state = RUNNABLE;
           //wakeup1(p);
@@ -542,6 +543,11 @@ exit(void)
     sleep(curproc, &ptable.lock);
   }
 
+  if(curproc->parent){
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      p->killed = 1;
+    }
+  }
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
     if(curproc->ofile[fd]){
@@ -558,8 +564,10 @@ exit(void)
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
-  if(curproc->parent)
+  if(curproc->parent){
     wakeup1(curproc->parent);
+    cprintf("waked parent, tid: %d\n", curproc->parent->tid);
+  }
 
   //master thread might be sleeping
   if(curproc->master)
@@ -693,7 +701,7 @@ choosebystride(){
 void
 scheduler(void)
 {
-  struct proc *p;
+  struct proc *p, *t;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -737,6 +745,28 @@ scheduler(void)
         if(mlfqvmp.slice_cnt== 100){
           mlfqvmp.slice_cnt= 0;
           priorityboost();
+        }
+      }
+
+      // If there or exited worker thread of the process, 
+      // then deallocate the resources.
+      for(t = ptable.proc; t < &ptable.proc[NPROC]; t++){
+        if(t->master == p && t->killed && t->state == ZOMBIE){
+          kfree(p->kstack);
+          t->kstack = 0;
+          t->pid = 0;
+          t->parent = 0;
+          t->master = 0;
+          t->name[0] = 0;
+          t->killed = 0;
+          t->state = UNUSED;
+          deallocuvm(t->pgdir, t->sz, t->originalbase);
+          if(t->sz < p->sz){
+            p->emptystacks[p->emptystackcnt++] = t->originalbase;
+          }
+          else{
+            p->sz -= 2 * PGSIZE;
+          }   
         }
       }
       // Switch to chosen process.  It is the process's job
@@ -1033,9 +1063,10 @@ thread_exit(void *retval)
 
   // Save return value in the proc struct
   curproc->retval = retval;
-
+  cprintf("retval: %d\n", (int)(retval));
   acquire(&ptable.lock);
   wakeup1(curproc->master);
+  wakeup1(curproc->parent);
 
   // Jump into the scheduler, never to return
   curproc->state = ZOMBIE;
