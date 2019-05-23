@@ -1065,17 +1065,16 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->tid = *thread;
   
   //thread Linkedlist operation
-  if(curproc->next_thread){
-    curproc->prev_thread->next_thread = np;
-    np->prev_thread = curproc->prev_thread;
-    curproc->prev_thread = np;
+  if(!curproc->thread_header){
+    curproc->thread_header = np;
   }
   else{
-    curproc->next_thread = np;
-    curproc->prev_thread = np;
-    np->prev_thread = curproc;
+    if(curproc->thread_header->next_thread)
+      curproc->thread_header->next_thread->prev_thread = np;
+    np->next_thread = curproc->thread_header->next_thread;
+    curproc->thread_header->next_thread = np;
+    np->prev_thread = curproc->thread_header;
   }
-  np->next_thread = 0;
 
   acquire(&ptable.lock);
 
@@ -1136,10 +1135,10 @@ thread_join(thread_t thread, void **retval)
   
   acquire(&ptable.lock);
   for(;;){
-    p = curproc->next_thread;
+    p = curproc->thread_header;
     while(p){
-      cprintf("found tid: %d\n", (int)p->tid);
       if(p->tid == thread){
+        cprintf("found tid: %d\n", (int)p->tid);
         found = 1;
         if(p->state == ZOMBIE){
           dealloc_thread(p);
@@ -1237,7 +1236,8 @@ dealloc_thread(struct proc* worker){
   }
   
   //delete from the thread linked list
-  worker->prev_thread->next_thread = worker->next_thread;
+  if(worker->prev_thread)
+    worker->prev_thread->next_thread = worker->next_thread;
   if(worker->next_thread)
     worker->next_thread->prev_thread = worker->prev_thread;
 

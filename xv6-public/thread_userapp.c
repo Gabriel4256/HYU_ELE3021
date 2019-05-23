@@ -24,7 +24,7 @@ void *thread_main(void *arg)
 	if((int)arg == 4){
 		sleep(1000);
 		//kill(6);
-		exit();
+		// exit();
 	}
 	//while(1){}
 	thread_exit(arg);
