@@ -430,17 +430,9 @@ growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
-  struct proc *p;
   
-  p = curproc;
-  while (p->master)
-  {
-    curproc->sz = p->master->sz;
-    p = p->master; 
-  }
-  
+  sz = curproc->master? curproc->master->sz : curproc->sz;
 
-  sz = curproc->sz;
   if(n > 0){
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
@@ -449,7 +441,8 @@ growproc(int n)
       return -1;
   }
   curproc->sz = sz;
-  p->sz = sz;
+  if(curproc->master)
+    curproc->master->sz = sz;
   switchuvm(curproc);
   return 0;
 }
@@ -463,18 +456,14 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
-  struct proc* p;
 
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
   }
 
-  p = curproc;
-  while(p->master){
-    curproc->sz = p->master->sz;
-    p = p->master;
-  }
+  if(curproc->master)
+    curproc->sz = curproc->master->sz;
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
@@ -529,13 +518,40 @@ exit(void)
 
   // If there is worker thread not joined by master thread,
   // then terminate it and deallocate resources
-  // if(curproc->next_thread){
+  if(curproc->master)
+    release(&ptable.lock);
+  else{
+    for(;;){
+      p = curproc->next_thread;
+      found = 0;
+      while(p){
+        if(p->state == ZOMBIE)
+          dealloc_thread(p);
+        else{
+          found = 1;
+          p->killed = 1;
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+        }
+        p = p->next_thread;
+      }
+      if(!found){
+        release(&ptable.lock);
+        break;
+      }
+      sleep(curproc, &ptable.lock);
+    }
+  }
+
+  // This waiting process begins only if when the thread has no master. 
+  // if(!curproc->master){
   //   for(;;){
-  //     p = curproc->next_thread;
   //     found = 0;
+  //     p = curproc->next_thread;
   //     while(p){
-  //       if(p->state == ZOMBIE)
+  //       if(p->state == ZOMBIE){
   //         dealloc_thread(p);
+  //       }
   //       else{
   //         found = 1;
   //         p->killed = 1;
@@ -549,35 +565,6 @@ exit(void)
   //       break;
   //     }
   //     sleep(curproc, &ptable.lock);
-  //   }
-  // }
-
-  for(;;){
-    found = 0;
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->master == curproc){
-        if(p->state == ZOMBIE){
-          dealloc_thread(p);
-        }
-        else{
-          found = 1;
-          p->killed = 1;
-          if(p->state == SLEEPING)
-            p->state = RUNNABLE;
-        }
-      }
-    }
-    if(!found){
-      release(&ptable.lock);
-      break;
-    }
-    sleep(curproc, &ptable.lock);
-  }
-
-  // if(curproc->master && !curproc->killed){
-  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-  //     if(p->master == curproc->master)
-  //       p->killed = 1;
   //   }
   // }
 
@@ -606,6 +593,7 @@ exit(void)
       curproc->master->killed = 1;
     wakeup1(curproc->master);
   }
+
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
@@ -782,6 +770,7 @@ scheduler(void)
         }
       }
 
+      //Handling for deallocation in case of kill
       for(q = ptable.proc; q < &ptable.proc[NPROC]; q++){
         if(q->master == p && q->state == ZOMBIE && q->killed)
           dealloc_thread(q);
@@ -931,8 +920,9 @@ wakeup(void *chan)
 int
 kill(int pid)
 {
-  struct proc *p;
+  struct proc *p, *q, *next;
   acquire(&ptable.lock);
+
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
       cprintf("KILL %d\n", p->pid);
@@ -943,7 +933,36 @@ kill(int pid)
         if(p->master->thread_kill_cnt == 2){
           // If kill count is 2, then kill the master threads
           p->master->killed = 1;
-          break;
+          if(p->master->state == SLEEPING)
+            p->master->state = RUNNABLE;
+        }
+      }
+      else{
+        if(p->thread_kill_cnt){
+          p->killed = 1;
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+          release(&ptable.lock);
+          return 0;
+        }
+        // If kill count was 0, then change the master thread to next thread.
+        if(p->next_thread){
+          next = p->next_thread;
+          p->master = next;
+          next->master = 0;
+
+          p->next_thread = next->next_thread;
+          p->prev_thread = next;
+          if(p->next_thread)
+            p->next_thread->prev_thread = p;
+          next->next_thread = p;
+          next->prev_thread = 0;
+          next->thread_kill_cnt = 1;
+
+          q = next->next_thread;
+          while(q)
+            q->master = next;
+            q = q->next_thread;
         }
       }
 
@@ -1035,7 +1054,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->pgdir = curproc->pgdir;
 
   //set other values
-  np->master = curproc;
+  np->master = curproc->master? curproc->master : curproc;
   *np->tf = *curproc->tf;
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
@@ -1065,16 +1084,12 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->tid = *thread;
   
   //thread Linkedlist operation
-  if(!curproc->thread_header){
-    curproc->thread_header = np;
+  if(curproc->next_thread){
+    curproc->next_thread->prev_thread = np;
   }
-  else{
-    if(curproc->thread_header->next_thread)
-      curproc->thread_header->next_thread->prev_thread = np;
-    np->next_thread = curproc->thread_header->next_thread;
-    curproc->thread_header->next_thread = np;
-    np->prev_thread = curproc->thread_header;
-  }
+  np->prev_thread = curproc;
+  np->next_thread = curproc->next_thread;
+  curproc->next_thread = np;
 
   acquire(&ptable.lock);
 
@@ -1135,7 +1150,7 @@ thread_join(thread_t thread, void **retval)
   
   acquire(&ptable.lock);
   for(;;){
-    p = curproc->thread_header;
+    p = curproc->next_thread;
     while(p){
       if(p->tid == thread){
         cprintf("found tid: %d\n", (int)p->tid);
@@ -1242,4 +1257,15 @@ dealloc_thread(struct proc* worker){
     worker->next_thread->prev_thread = worker->prev_thread;
 
   return 0;
+}
+
+struct proc*
+get_first_master(struct proc* p)
+{
+  // struct proc * q;
+  // q = p;
+  // while(q->master){
+  //   q = q->master;
+  // }
+  return p->master;
 }
