@@ -23,11 +23,14 @@ void *thread_main(void *arg)
 	// }
 	if((int)arg == 4){
 		//sleep(1000);
-		//kill(6);
-		exit();
+		kill(3);
+		sleep(1000);
+		kill(8);
+		// exit();
 	}
-	//while(1){}
-	thread_exit(arg);
+	while(1){}
+	if(getpid()!=3)
+		thread_exit(arg);
 	return 0;
 }
 
@@ -45,8 +48,9 @@ main(int argc, char *argv[])
 		// tmp = &tl;
 		// *tmp = 300;
 		// printf(1, "tid: %d\n", (int)tl);
-		// kill(4);
-		// kill(3);
+		// kill(6);
+		// sleep(100);
+		// kill(7);
 		// for(i=0; i<10; i++){
 		// 	thread_join(thread[i], (void**)&ret);
 		// 	printf(1, "retval: %d\n", ret);

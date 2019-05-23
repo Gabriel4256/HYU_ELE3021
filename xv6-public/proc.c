@@ -510,7 +510,7 @@ exit(void)
   struct proc *p;
   int fd;
   int found = 0;
-
+  cprintf("pid: %d\n", curproc->pid);
   if(curproc == initproc)
     panic("init exiting");
 
@@ -939,7 +939,6 @@ kill(int pid)
       }
       else{
         if(p->thread_kill_cnt){
-          p->killed = 1;
           if(p->state == SLEEPING)
             p->state = RUNNABLE;
           release(&ptable.lock);
@@ -948,6 +947,7 @@ kill(int pid)
         // If kill count was 0, then change the master thread to next thread.
         if(p->next_thread){
           next = p->next_thread;
+          cprintf("new master: %d\n", next->pid);
           p->master = next;
           next->master = 0;
 
@@ -958,11 +958,19 @@ kill(int pid)
           next->next_thread = p;
           next->prev_thread = 0;
           next->thread_kill_cnt = 1;
+          next->parent = p->parent;
+          // p->state = ZOMBIE;
+          next->sz = p->sz;
+          int pid = p->pid;
+          p->pid = next->pid;
+          next->pid = pid;
+          p->parent = 0;
 
           q = next->next_thread;
-          while(q)
+          while(q){
             q->master = next;
             q = q->next_thread;
+          }
         }
       }
 
