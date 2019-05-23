@@ -36,7 +36,7 @@ exec(char *path, char **argv)
   //       }
   //       else{
   //         p->sz -= 2 * PGSIZE;
-  //     }   
+  //       }   
   //   }
   // }
 

@@ -430,6 +430,15 @@ growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
+  struct proc *p;
+  
+  p = curproc;
+  while (p->master)
+  {
+    curproc->sz = p->master->sz;
+    p = p->master; 
+  }
+  
 
   sz = curproc->sz;
   if(n > 0){
@@ -440,6 +449,7 @@ growproc(int n)
       return -1;
   }
   curproc->sz = sz;
+  p->sz = sz;
   switchuvm(curproc);
   return 0;
 }
@@ -453,10 +463,17 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
+  struct proc* p;
 
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
+  }
+
+  p = curproc;
+  while(p->master){
+    curproc->sz = p->master->sz;
+    p = p->master;
   }
 
   // Copy process state from proc.
@@ -545,7 +562,6 @@ exit(void)
         else{
           found = 1;
           p->killed = 1;
-          p->master = curproc;
           if(p->state == SLEEPING)
             p->state = RUNNABLE;
         }
@@ -558,12 +574,13 @@ exit(void)
     sleep(curproc, &ptable.lock);
   }
 
-  if(curproc->master && !curproc->killed){
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->master == curproc->master)
-        p->killed = 1;
-    }
-  }
+  // if(curproc->master && !curproc->killed){
+  //   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+  //     if(p->master == curproc->master)
+  //       p->killed = 1;
+  //   }
+  // }
+
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
     if(curproc->ofile[fd]){
@@ -584,8 +601,11 @@ exit(void)
     wakeup1(curproc->parent);
 
   //master thread might be sleeping
-  if(curproc->master)
+  if(curproc->master){
+    if(!curproc->killed)
+      curproc->master->killed = 1;
     wakeup1(curproc->master);
+  }
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->parent == curproc){
@@ -715,7 +735,7 @@ choosebystride(){
 void
 scheduler(void)
 {
-  struct proc *p, *t;
+  struct proc *p, *q;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -762,12 +782,9 @@ scheduler(void)
         }
       }
 
-      // If there or exited worker thread of the process, 
-      // then deallocate the resources.
-      for(t = ptable.proc; t < &ptable.proc[NPROC]; t++){
-        if(t->master == p && t->killed && t->state == ZOMBIE){
-          dealloc_thread(t);
-        }
+      for(q = ptable.proc; q < &ptable.proc[NPROC]; q++){
+        if(q->master == p && q->state == ZOMBIE && q->killed)
+          dealloc_thread(q);
       }
 
 
@@ -924,13 +941,8 @@ kill(int pid)
         // If p is worker thread, then increase kill cnt
         p->master->thread_kill_cnt++;
         if(p->master->thread_kill_cnt == 2){
-          // If kill count is 2, then kill all the worker threads
-          p = p->master->next_thread;
-          p->master->thread_kill_cnt = 0;
-          while(p){
-            p->killed = 1;
-            p = p->next_thread;
-          }
+          // If kill count is 2, then kill the master threads
+          p->master->killed = 1;
           break;
         }
       }
@@ -989,6 +1001,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 {
   struct proc *np;
   struct proc *curproc = myproc();
+  struct proc *p;
   int i = 0;
   uint sz = 0;
   uint sp = 0;
@@ -999,6 +1012,11 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   }
   // --nextpid;
   
+  p = curproc;
+  while(p->master){
+    curproc->sz = curproc->master->sz;
+    p = p->master;
+  }
   sz = curproc->sz;
   if(curproc->emptystackcnt > 0){
     // Found empty stack space
@@ -1008,8 +1026,10 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   //allocates two pages of memory, one for thread user stack and one for guard page
   if((sz = allocuvm(curproc->pgdir, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
-  if(curproc->sz < sz)
+  if(curproc->sz < sz){
     curproc->sz = sz;
+    p->sz = sz;
+  }
 
   //share page table of master thread
   np->pgdir = curproc->pgdir;
@@ -1194,6 +1214,11 @@ dealloc_thread(struct proc* worker){
   struct proc* master;
   if(!worker->master)
     return -1;
+
+  master = worker;
+  while(master->master)
+    master = master->master;
+  
   master = worker->master;
   kfree(worker->kstack);
   worker->kstack = 0;
@@ -1203,8 +1228,8 @@ dealloc_thread(struct proc* worker){
   worker->name[0] = 0;
   worker->killed = 0;
   worker->state = UNUSED;
-  deallocuvm(worker->pgdir, worker->sz, worker->originalbase);
-  if(worker->sz < master->sz){
+  deallocuvm(worker->pgdir, worker->originalbase + 2*PGSIZE, worker->originalbase);
+  if(worker->originalbase + 2* PGSIZE < master->sz){
     master->emptystacks[master->emptystackcnt++] = worker->originalbase;
   }
   else{
