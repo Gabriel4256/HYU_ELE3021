@@ -18,7 +18,8 @@ int
 fetchint(uint addr, int *ip)
 {
   struct proc *curproc = myproc();
-
+  if(curproc->master)
+    curproc->sz = get_highest_master(curproc)->sz;
   if(addr >= curproc->sz || addr+4 > curproc->sz)
     return -1;
   *ip = *(int*)(addr);
@@ -33,6 +34,9 @@ fetchstr(uint addr, char **pp)
 {
   char *s, *ep;
   struct proc *curproc = myproc();
+
+  if (curproc->master)
+    curproc->sz = get_highest_master(curproc)->sz;
 
   if(addr >= curproc->sz)
     return -1;
@@ -60,7 +64,9 @@ argptr(int n, char **pp, int size)
 {
   int i;
   struct proc *curproc = myproc();
- 
+  if(curproc->master)
+    curproc->sz = get_highest_master(curproc)->sz;
+
   if(argint(n, &i) < 0)
     return -1;
   if(size < 0 || (uint)i >= curproc->sz || (uint)i+size > curproc->sz)

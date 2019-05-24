@@ -40,6 +40,7 @@ struct proc* choosebystride();
 int dealloc_thread(struct proc*);
 struct proc* get_highest_master(struct proc*);
 uint nexttid = 1;
+struct spinlock memlock;
 
 void
 initmlfq()
@@ -433,6 +434,7 @@ growproc(int n)
   struct proc *curproc = myproc();
   struct proc* master;
 
+  acquire(&memlock);
   master = get_highest_master(curproc);
   sz = master->sz;
 
@@ -446,8 +448,9 @@ growproc(int n)
   curproc->sz = sz;
   if(curproc->master)
     master->sz = sz;
+  release(&memlock);
   switchuvm(curproc);
-  return 0;
+  return sz;
 }
 
 // Create a new process copying p as the parent.
@@ -1048,6 +1051,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   // --nextpid;
     
   hmaster = get_highest_master(curproc);
+  acquire(&memlock);
   curproc->sz  = hmaster->sz;
   sz = curproc->sz;
   if(hmaster->emptystackcnt > 0){
@@ -1062,7 +1066,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     curproc->sz = sz;
     hmaster->sz = sz;
   }
-
+  release(&memlock);
   //share page table of master thread
   np->pgdir = curproc->pgdir;
 
@@ -1211,12 +1215,15 @@ dealloc_thread(struct proc* worker){
   worker->state = UNUSED;
   worker->emptystackcnt = 0;
   deallocuvm(worker->pgdir, worker->originalbase + 2*PGSIZE, worker->originalbase);
+  
+  acquire(&memlock);
   if(worker->originalbase + 2* PGSIZE < hmaster->sz){
     hmaster->emptystacks[hmaster->emptystackcnt++] = worker->originalbase;
   }
   else{
     hmaster->sz -= 2 * PGSIZE;
   }
+  release(&memlock);
   
   //delete from the thread linked list
   if(worker->prev_thread)

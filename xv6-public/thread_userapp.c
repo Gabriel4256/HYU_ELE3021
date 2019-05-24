@@ -10,6 +10,7 @@ char *argv[] = { "ls", 0 };
 void *thread_main(void *arg)
 {
 	int i;
+	int* ad;
 	// double result=0.0;
 
 	//printf(1, "therad: %d, %d\n", (int)arg, getpid());
@@ -22,12 +23,19 @@ void *thread_main(void *arg)
    		}
    		//printf(1, "thread: %d, result = %d\n", (int)arg, (int)result);
 	// }
+	ad = (int*)sbrk(sizeof(int) * (int)arg);
+	for(i=0; i<(int)arg; i++){
+		ad[i] = (int)arg;
+	}
+	for(i=0; i<(int)arg; i++){
+		printf(1, "arg: %d, value: %d\n", (int)arg, ad[i]);
+	}
 	if((int)arg == 4){
 		//sleep(1000);
 		// kill(3);
 		// sleep(1000);
 		// kill(8);
-		exec("ls", argv);
+		// exec("ls", argv);
 		// thread_create(&(thread[3]), &thread_main, (void *)15);
 		//exit();
 	}
