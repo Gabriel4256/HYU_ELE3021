@@ -38,6 +38,7 @@ double getminpath();
 struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
 int dealloc_thread(struct proc*);
+struct proc* get_highest_master(struct proc*);
 uint nexttid = 1;
 
 void
@@ -430,8 +431,10 @@ growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
-  
-  sz = curproc->master? curproc->master->sz : curproc->sz;
+  struct proc* master;
+
+  master = get_highest_master(curproc);
+  sz = master->sz;
 
   if(n > 0){
     if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
@@ -442,7 +445,7 @@ growproc(int n)
   }
   curproc->sz = sz;
   if(curproc->master)
-    curproc->master->sz = sz;
+    master->sz = sz;
   switchuvm(curproc);
   return 0;
 }
@@ -463,7 +466,7 @@ fork(void)
   }
 
   if(curproc->master)
-    curproc->sz = curproc->master->sz;
+    curproc->sz = get_highest_master(curproc)->sz;
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
@@ -590,7 +593,7 @@ exit(void)
   //master thread might be sleeping
   if(curproc->master){
     if(!curproc->killed)
-      curproc->master->killed = 1;
+      get_highest_master(curproc)->killed = 1;
     wakeup1(curproc->master);
   }
 
@@ -637,6 +640,7 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
+        p->emptystackcnt = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -772,7 +776,7 @@ scheduler(void)
 
       //Handling for deallocation in case of kill
       for(q = ptable.proc; q < &ptable.proc[NPROC]; q++){
-        if(q->master == p && q->state == ZOMBIE && q->killed)
+        if(get_highest_master(q) == p && q->state == ZOMBIE && q->killed)
           dealloc_thread(q);
       }
 
@@ -920,7 +924,7 @@ wakeup(void *chan)
 int
 kill(int pid)
 {
-  struct proc *p, *q, *next;
+  struct proc *p, *q, *next_master, *hmaster;
   acquire(&ptable.lock);
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
@@ -928,47 +932,51 @@ kill(int pid)
       cprintf("KILL %d\n", p->pid);
       p->killed = 1;
       if(p->master){
+        hmaster = get_highest_master(p);
         // If p is worker thread, then increase kill cnt
-        p->master->thread_kill_cnt++;
-        if(p->master->thread_kill_cnt == 2){
+        hmaster->thread_kill_cnt++;
+        if(hmaster->thread_kill_cnt == 2){
           // If kill count is 2, then kill the master threads
-          p->master->killed = 1;
-          if(p->master->state == SLEEPING)
-            p->master->state = RUNNABLE;
+          hmaster->killed = 1;
+          if(hmaster->state == SLEEPING)
+            hmaster->state = RUNNABLE;
         }
       }
       else{
+        //If p is highest master
         if(p->thread_kill_cnt){
           if(p->state == SLEEPING)
             p->state = RUNNABLE;
           release(&ptable.lock);
           return 0;
         }
+
         // If kill count was 0, then change the master thread to next thread.
         if(p->next_thread){
-          next = p->next_thread;
-          cprintf("new master: %d\n", next->pid);
-          p->master = next;
-          next->master = 0;
+          next_master = p->next_thread;
+          cprintf("new master: %d\n", next_master->pid);
+          p->master = next_master;
+          next_master->master = 0;
 
-          p->next_thread = next->next_thread;
-          p->prev_thread = next;
+          p->next_thread = next_master->next_thread;
+          p->prev_thread = next_master;
           if(p->next_thread)
             p->next_thread->prev_thread = p;
-          next->next_thread = p;
-          next->prev_thread = 0;
-          next->thread_kill_cnt = 1;
-          next->parent = p->parent;
+          next_master->next_thread = p;
+          next_master->prev_thread = 0;
+          next_master->thread_kill_cnt = 1;
+          next_master->parent = p->parent;
           // p->state = ZOMBIE;
-          next->sz = p->sz;
+          next_master->sz = p->sz;
           int pid = p->pid;
-          p->pid = next->pid;
-          next->pid = pid;
+          p->pid = next_master->pid;
+          next_master->pid = pid;
           p->parent = 0;
 
-          q = next->next_thread;
+          q = next_master->next_thread;
           while(q){
-            q->master = next;
+            if(q->master == p)
+              q->master = next_master;
             q = q->next_thread;
           }
         }
@@ -1028,7 +1036,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
 {
   struct proc *np;
   struct proc *curproc = myproc();
-  struct proc *p;
+  struct proc *hmaster;
   int i = 0;
   uint sz = 0;
   uint sp = 0;
@@ -1038,16 +1046,13 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     return -1;
   }
   // --nextpid;
-  
-  p = curproc;
-  while(p->master){
-    curproc->sz = curproc->master->sz;
-    p = p->master;
-  }
+    
+  hmaster = get_highest_master(curproc);
+  curproc->sz  = hmaster->sz;
   sz = curproc->sz;
-  if(curproc->emptystackcnt > 0){
+  if(hmaster->emptystackcnt > 0){
     // Found empty stack space
-    sz = curproc->emptystacks[--curproc->emptystackcnt];
+    sz = hmaster->emptystacks[--hmaster->emptystackcnt];
   }
 
   //allocates two pages of memory, one for thread user stack and one for guard page
@@ -1055,14 +1060,14 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     goto bad;
   if(curproc->sz < sz){
     curproc->sz = sz;
-    p->sz = sz;
+    hmaster->sz = sz;
   }
 
   //share page table of master thread
   np->pgdir = curproc->pgdir;
 
   //set other values
-  np->master = curproc->master? curproc->master : curproc;
+  np->master = curproc;
   *np->tf = *curproc->tf;
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
@@ -1184,64 +1189,18 @@ thread_join(thread_t thread, void **retval)
     // Wait for the worker thread to exit
     sleep(curproc, &ptable.lock);
   }
-//   acquire(&ptable.lock);
-// for(;;){
-//   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-//     if(p->master != curproc)
-//       continue;
-//     if(p->tid == thread){
-//       found = 1;
-//       if(p->state == ZOMBIE){
-//         // If the thread has been terminated already,
-//         // Then clean the resources allocated to the thread.
-//         // kfree(p->kstack);
-//         // p->kstack = 0;
-//         // p->pid = 0;
-//         // p->parent = 0;
-//         // p->master = 0;
-//         // p->name[0] = 0;
-//         // p->killed = 0;
-//         // p->state = UNUSED;
-//         // deallocuvm(p->pgdir, p->sz, p->originalbase);
-//         // if(p->sz < curproc->sz){
-//         //   curproc->emptystacks[curproc->emptystackcnt++] = p->originalbase;
-//         // }
-//         // else{
-//         //   curproc->sz -= 2 * PGSIZE;
-//         // }
-//         dealloc_thread(p);
-
-//         //pass return value of the thread to the argument retval
-//         *retval = p->retval;
-//         p->retval = 0;
-//         release(&ptable.lock);
-//         return 0;
-//       }
-//     }
-//   }
-//   if(!found || curproc->killed){
-//     // Not found the thread of such a id, or master thread has already been killed.
-//     release(&ptable.lock);
-//     return -1;
-//   }
-
-//   // Wait for the worker thread to exit
-//   sleep(curproc, &ptable.lock);
-// }
   return 0;
 }
 
 int
 dealloc_thread(struct proc* worker){
-  struct proc* master;
+  struct proc* hmaster;
+  cprintf("%d willl be deallocated\n", (int)worker->pid);
   if(!worker->master)
     return -1;
 
-  master = worker;
-  while(master->master)
-    master = master->master;
+  hmaster = get_highest_master(worker);
   
-  master = worker->master;
   kfree(worker->kstack);
   worker->kstack = 0;
   worker->pid = 0;
@@ -1250,12 +1209,13 @@ dealloc_thread(struct proc* worker){
   worker->name[0] = 0;
   worker->killed = 0;
   worker->state = UNUSED;
+  worker->emptystackcnt = 0;
   deallocuvm(worker->pgdir, worker->originalbase + 2*PGSIZE, worker->originalbase);
-  if(worker->originalbase + 2* PGSIZE < master->sz){
-    master->emptystacks[master->emptystackcnt++] = worker->originalbase;
+  if(worker->originalbase + 2* PGSIZE < hmaster->sz){
+    hmaster->emptystacks[hmaster->emptystackcnt++] = worker->originalbase;
   }
   else{
-    master->sz -= 2 * PGSIZE;
+    hmaster->sz -= 2 * PGSIZE;
   }
   
   //delete from the thread linked list
@@ -1268,12 +1228,12 @@ dealloc_thread(struct proc* worker){
 }
 
 struct proc*
-get_first_master(struct proc* p)
+get_highest_master(struct proc* p)
 {
-  // struct proc * q;
-  // q = p;
-  // while(q->master){
-  //   q = q->master;
-  // }
-  return p->master;
+  struct proc * q;
+  q = p;
+  while(q->master){
+    q = q->master;
+  }
+  return q;
 }

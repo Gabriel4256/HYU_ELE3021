@@ -5,6 +5,7 @@
 thread_t thread[15];
 thread_t tl = 150;
 int result = 0;
+char *argv[] = { "ls", 0 };
 
 void *thread_main(void *arg)
 {
@@ -23,10 +24,15 @@ void *thread_main(void *arg)
 	// }
 	if((int)arg == 4){
 		//sleep(1000);
-		kill(3);
-		sleep(1000);
-		kill(8);
-		// exit();
+		// kill(3);
+		// sleep(1000);
+		// kill(8);
+		//exec("ls", argv);
+		thread_create(&(thread[3]), &thread_main, (void *)15);
+		//exit();
+	}
+	if((int)arg == 15){
+		exit();
 	}
 	while(1){}
 	if(getpid()!=3)

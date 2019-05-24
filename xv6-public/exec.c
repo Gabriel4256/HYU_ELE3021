@@ -18,8 +18,10 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
   struct proc *curproc = myproc();
+  struct proc *p;
   // struct proc* p;
-
+  oldpgdir = 0;
+  cprintf("Fwwe: %d\n",curproc->pid);
   // for(p = ptable.proc; p < &ptable.proc[NPROC]; t++){
   //     if(p->master == curproc){
   //       kfree(p->kstack);
@@ -39,8 +41,52 @@ exec(char *path, char **argv)
   //       }   
   //   }
   // }
+  if(curproc->next_thread || curproc->master){
+    p = curproc->master;
+    curproc->parent = p->parent;
+    if(curproc->prev_thread)
+      curproc->prev_thread->next_thread = curproc->next_thread;
+    if(curproc->next_thread)
+      curproc->next_thread->prev_thread = curproc->prev_thread;
+    // curproc->master = 0;
+    while(p){
+      if(p != curproc){
+        p->killed = 1;
+      }
+        // dealloc_thread(p);
+      p = p->next_thread;
+    }
+  }
+  //If it's thread, then change it to master thread and deallocate rest of them.
+  // if(curproc->master){
+  //   p = curproc->master;
+  //   next = p->next_thread;
+  //   cprintf("new master: %d\n", next->pid);
+  //   p->master = next;
+  //   next->master = 0;
 
+  //   p->next_thread = next->next_thread;
+  //   p->prev_thread = next;
+  //   if(p->next_thread)
+  //     p->next_thread->prev_thread = p;
+  //   next->next_thread = p;
+  //   next->prev_thread = 0;
+  //   next->thread_kill_cnt = 1;
+  //   next->parent = p->parent;
+  //   // p->state = ZOMBIE;
+  //   next->sz = p->sz;
+  //   int pid = p->pid;
+  //   p->pid = next->pid;
+  //   next->pid = pid;
+  //   p->parent = 0;
 
+  //   q = next->next_thread;
+  //   while(q){
+  //     q->master = next;
+  //     q = q->next_thread;
+  //   }
+  // }
+  
   
 
   begin_op();
@@ -126,7 +172,13 @@ exec(char *path, char **argv)
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
   switchuvm(curproc);
-  freevm(oldpgdir);
+  if(!curproc->master){
+    freevm(oldpgdir);
+  }
+  else{
+    cprintf("sfdfdf\n");
+    curproc->master = 0;
+  }
   return 0;
 
  bad:
