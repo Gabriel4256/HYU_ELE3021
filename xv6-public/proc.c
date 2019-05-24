@@ -513,7 +513,7 @@ exit(void)
   struct proc *p;
   int fd;
   int found = 0;
-  cprintf("pid: %d\n", curproc->pid);
+  cprintf("pid: %d in exit, name: %s\n", curproc->pid, curproc->name);
   if(curproc == initproc)
     panic("init exiting");
 
@@ -1236,4 +1236,76 @@ get_highest_master(struct proc* p)
     q = q->master;
   }
   return q;
+}
+
+void
+kill_threads(struct proc* hmaster){
+  struct proc* p;
+  int found;
+  p = hmaster->next_thread;
+
+  acquire(&ptable.lock);
+  if(hmaster->master){
+    cprintf("dffdfd\n");
+    p = get_highest_master(hmaster);
+    hmaster->parent = p->parent;
+    hmaster->pid = p->pid;
+    p->parent = hmaster;
+    // p->master = hmaster;
+    if(hmaster->next_thread)
+      hmaster->next_thread->prev_thread = hmaster->prev_thread;
+    if(hmaster->prev_thread)
+      hmaster->prev_thread->next_thread = hmaster->next_thread;
+    hmaster->prev_thread = hmaster->next_thread = 0;
+    hmaster->master = 0;
+    p->killed = 1;
+    if(p->state == SLEEPING)
+      p->state = RUNNABLE;
+    release(&ptable.lock);
+    wait();
+    return;
+    for(;;){
+      if(p->state == ZOMBIE){
+        dealloc_thread(p);
+        release(&ptable.lock);
+        return;
+      }
+      else{
+        sleep(hmaster, &ptable.lock);
+      }
+    }
+  }
+
+  for(;;){
+    p = hmaster->next_thread;
+    found = 0;
+    while(p){
+      if(p->state == ZOMBIE)
+        dealloc_thread(p);
+      else{
+        found = 1;
+        p->killed = 1;
+        if(p->state == SLEEPING)
+          p->state = RUNNABLE;
+      }
+      p = p->next_thread;
+    }
+    p = hmaster->prev_thread;
+    while(p){
+      if(p->state == ZOMBIE)
+        dealloc_thread(p);
+      else{
+        found = 1;
+        p->killed = 1;
+        if(p->state == SLEEPING)
+          p->state = RUNNABLE;
+      }
+      p = p->prev_thread;      
+    }
+    if(!found){
+      release(&ptable.lock);
+      break;
+    }
+    sleep(hmaster, &ptable.lock);
+  }
 }
