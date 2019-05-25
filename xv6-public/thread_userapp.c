@@ -7,10 +7,19 @@ thread_t tl = 150;
 int result = 0;
 char *argv[] = { "ls", 0 };
 
+void *fun2(void *arg){
+	sleep(10);
+	cpu_share(20);
+	thread_exit(arg);
+	// exit();
+	return 0;
+}
+
 void *thread_main(void *arg)
 {
 	int i;
 	int* ad;
+	int ret;
 	// double result=0.0;
 
 	//printf(1, "therad: %d, %d\n", (int)arg, getpid());
@@ -36,7 +45,9 @@ void *thread_main(void *arg)
 		// sleep(1000);
 		// kill(8);
 		// exec("ls", argv);
-		// thread_create(&(thread[3]), &thread_main, (void *)15);
+		thread_create(&(thread[3]), &fun2, (void *)15);
+		thread_join(thread[3], (void**)&ret);
+		printf(1, "retval: %d\n", ret);
 		//exit();
 	}
 	if((int)arg == 15){

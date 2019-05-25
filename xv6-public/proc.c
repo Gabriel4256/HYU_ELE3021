@@ -162,30 +162,33 @@ priorityboost()
   }
 }
 
+// This function should be called with ptable.lock held
 void 
 updatevals()
 {
-  struct proc* p = 0;
+  struct proc *p, *hmaster;
   double min = -1;
   double min2 = -1;
   int totalfixedshare = 0;
   defaultvmp.highpr = 0;
   fixedmin = 0;
   int mlfqcnt = 0;
+  // int pathlevel;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == RUNNABLE){
-      if(p->schedmode == 0){
-        if(min2 == -1 || p->pathlevel< min2)
+      hmaster = get_highest_master(p);
+      if(hmaster->schedmode == 0){
+        if(min2 == -1 || hmaster->pathlevel< min2)
         {
-          min2 = p->pathlevel;
-          defaultvmp.highpr = p;
+          min2 = hmaster->pathlevel;
+          defaultvmp.highpr = hmaster;
         }
       }
-      else if(p->schedmode == 1){
-        totalfixedshare += p->fixedshare;
-        if(min == -1 || p->path < min){
-          fixedmin = p;
-          min = p->path;
+      else if(hmaster->schedmode == 1){ 
+        totalfixedshare += hmaster->fixedshare;
+        if(min == -1 || hmaster->path < min){
+          fixedmin = hmaster;
+          min = hmaster->path;
         }
       }
       else{
@@ -237,11 +240,11 @@ getminpathlevel()
 int 
 cpu_share(int n)
 {
-  struct proc* p;
+  struct proc *p;
   int totalfixedshare = 0;
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->schedmode == 1 && (p->state == RUNNABLE || p->state == SLEEPING))
+    if(p->schedmode == 1 && (p->state == RUNNABLE || p->state == SLEEPING) && !p->master)
       totalfixedshare += p->fixedshare;
   }
 
@@ -249,10 +252,15 @@ cpu_share(int n)
     release(&ptable.lock);
     return -1;
   }
-  p = myproc();
-  p->schedmode = 1;
+  p = get_highest_master(myproc());
   p->fixedshare = n;
   p->path = getminpath();
+  while(p){
+    if(p->schedmode == 2)
+      delete(p->mnode);
+    p->schedmode = 1;
+    p = p->next_thread;
+  }
   release(&ptable.lock);
   return 0;
 }
@@ -260,18 +268,27 @@ cpu_share(int n)
 int
 run_MLFQ()
 {
-  struct mlfqnode* m;
+  // struct mlfqnode* m;
+  struct proc* p = myproc();
+  struct proc* hmaster;
+
+  acquire(&ptable.lock);
   if(!headers[0])
     initmlfq();
-  m = allocmlfqnode(myproc());
-  myproc()->schedmode = 2;
-  insertafter(headers[0], m);
+  hmaster = get_highest_master(p);
+  //put all the threads in the queue
+  while(hmaster){
+    hmaster->schedmode = 2;
+    insertafter(headers[0], allocmlfqnode(hmaster));
+    hmaster = hmaster->next_thread;
+  }
+  release(&ptable.lock);
   return 0;
 }
 
 int getlev(){
   struct proc* p = myproc();
-  if(p->schedmode!=2)
+  if(get_highest_master(p)->schedmode!=2)
     return -1;
   return p->mnode->level;
 }
@@ -415,6 +432,7 @@ userinit(void)
   
   p->state = RUNNABLE;
   p->schedmode = 0;
+  p->turn = p;
   updatevals();
   if(defaultvmp.highpr)
     p->pathlevel = defaultvmp.highpr->pathlevel;
@@ -497,6 +515,7 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->turn = np;
   np->schedmode = 0;
   np->pathlevel = getminpathlevel();
   //np->path = getminpath();
@@ -733,6 +752,7 @@ scheduler(void)
   struct proc *p, *q;
   struct cpu *c = mycpu();
   c->proc = 0;
+  int found;
   
   for(;;){
     // Enable interrupts on this processor.
@@ -742,15 +762,51 @@ scheduler(void)
     acquire(&ptable.lock);
     //for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     while((p = choosebystride()) !=0){
-      if(p->state != RUNNABLE)
-        continue;
+      found = 0;
+      //if(p->state != RUNNABLE)
+        //continue;
       if(p->schedmode == 0){
+        // cprintf("Chosen: %d\n", p->pid);
+        q = p->turn;
+        cprintf("Really chosen: %d\n", q->pid);
+        while(1){
+          if(!q)
+            q = p;
+          if(q->state == RUNNABLE){
+            found = 1;
+            p->turn = q->next_thread ? q->next_thread : p;
+            break;
+          }
+          q = q->next_thread;
+          if(q == p->turn)
+            break;
+        }
+        if(!found)
+          continue;
         defaultvmp.path += defaultvmp.stride;
         p->pathlevel+=1;
+        p = q;
         // cprintf("default: %d\n", (int)(defaultvmp.path));
       }
       else if(p->schedmode ==1){
+        cprintf("11111\n");
+        q = p->turn;
+        while(q){
+          if(!q)
+            q = p;
+          if(q->state == RUNNABLE){
+            found = 1;
+            p->turn = q->next_thread ? q->next_thread : p;
+            break;
+          }
+          q = q->next_thread;
+          if(q == p->turn)
+            continue;
+        }
+        if(!found)
+          continue;
         p->path += (double)(100/(double)p->fixedshare);
+        p = q;
         // cprintf("fixed: %d\n", (int) (p->path));
       }
       else if(p->schedmode == 2){
@@ -969,6 +1025,11 @@ kill(int pid)
           next_master->prev_thread = 0;
           next_master->thread_kill_cnt = 1;
           next_master->parent = p->parent;
+
+          // Copy path and pathlevel 
+          next_master->path = p->path;
+          next_master->pathlevel = p->pathlevel;
+
           // p->state = ZOMBIE;
           next_master->sz = p->sz;
           int pid = p->pid;
@@ -1101,6 +1162,8 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->tid = *thread;
   
   //thread Linkedlist operation
+  acquire(&ptable.lock);
+  
   if(curproc->next_thread){
     curproc->next_thread->prev_thread = np;
   }
@@ -1108,10 +1171,12 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   np->next_thread = curproc->next_thread;
   curproc->next_thread = np;
 
-  acquire(&ptable.lock);
-
   np->state = RUNNABLE;
-  np->schedmode = 0;
+  np->schedmode = curproc->schedmode;
+  if(np->schedmode == 2){
+    // If scheduling mode is mlfq, then put it in the queue
+    insertafter(headers[0], allocmlfqnode(np));
+  }
   np->pathlevel = getminpathlevel();
 
   release(&ptable.lock);
@@ -1215,7 +1280,7 @@ dealloc_thread(struct proc* worker){
   worker->state = UNUSED;
   worker->emptystackcnt = 0;
   deallocuvm(worker->pgdir, worker->originalbase + 2*PGSIZE, worker->originalbase);
-  
+
   acquire(&memlock);
   if(worker->originalbase + 2* PGSIZE < hmaster->sz){
     hmaster->emptystacks[hmaster->emptystackcnt++] = worker->originalbase;
