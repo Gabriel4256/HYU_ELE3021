@@ -22,7 +22,15 @@ exec(char *path, char **argv)
   // struct proc *p;
   // struct proc* p;
   oldpgdir = 0;
-  cprintf("Fwwe: %d\n",curproc->pid);
+
+  // p = get_highest_master(curproc);
+  // while(p){
+  //   if(p!=curproc && p->state == RUNNABLE){
+  //     p->state = SLEEPING;
+  //   }
+  //   p = p->next_thread;
+  // }
+  sleep_other_threads(curproc);
 
   begin_op();
 

@@ -490,12 +490,13 @@ fork(void)
     curproc->sz = get_highest_master(curproc)->sz;
 
   // Copy process state from proc.
-  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+  if((np->pgdir = copyuvm2(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
     return -1;
   }
+  
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -535,7 +536,7 @@ exit(void)
   struct proc *p;
   int fd;
   int found = 0;
-  cprintf("pid: %d in exit, name: %s\n", curproc->pid, curproc->name);
+  // cprintf("pid: %d in exit, name: %s\n", curproc->pid, curproc->name);
   if(curproc == initproc)
     panic("init exiting");
 
@@ -567,7 +568,6 @@ exit(void)
       sleep(curproc, &ptable.lock);
     }
   }
-
   // This waiting process begins only if when the thread has no master. 
   // if(!curproc->master){
   //   for(;;){
@@ -611,7 +611,7 @@ exit(void)
   // Parent might be sleeping in wait().
   if(curproc->parent)
     wakeup1(curproc->parent);
-
+  
   //master thread might be sleeping
   if(curproc->master){
     if(!curproc->killed)
@@ -667,7 +667,6 @@ wait(void)
         return pid;
       }
     }
-
     // No point waiting if we don't have any children.
     if(!havekids || curproc->killed){
       release(&ptable.lock);
@@ -768,7 +767,7 @@ scheduler(void)
       if(p->schedmode == 0){
         // cprintf("Chosen: %d\n", p->pid);
         q = p->turn;
-        cprintf("Really chosen: %d\n", q->pid);
+        // cprintf("Really chosen: %d\n", q->pid);
         while(1){
           if(!q)
             q = p;
@@ -789,9 +788,9 @@ scheduler(void)
         // cprintf("default: %d\n", (int)(defaultvmp.path));
       }
       else if(p->schedmode ==1){
-        cprintf("11111\n");
+        // cprintf("11111\n");
         q = p->turn;
-        while(q){
+        while(1){
           if(!q)
             q = p;
           if(q->state == RUNNABLE){
@@ -801,7 +800,7 @@ scheduler(void)
           }
           q = q->next_thread;
           if(q == p->turn)
-            continue;
+            break;
         }
         if(!found)
           continue;
@@ -963,6 +962,7 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan){
+      // cprintf("Wake up: %d\n", (int)p->pid);
       p->state = RUNNABLE;
       //p->path = getminpath();
     }
@@ -988,7 +988,7 @@ kill(int pid)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
-      cprintf("KILL %d\n", p->pid);
+      // cprintf("KILL %d\n", p->pid);
       p->killed = 1;
       if(p->master){
         hmaster = get_highest_master(p);
@@ -1013,7 +1013,7 @@ kill(int pid)
         // If kill count was 0, then change the master thread to next thread.
         if(p->next_thread){
           next_master = p->next_thread;
-          cprintf("new master: %d\n", next_master->pid);
+          // cprintf("new master: %d\n", next_master->pid);
           p->master = next_master;
           next_master->master = 0;
 
@@ -1235,7 +1235,7 @@ thread_join(thread_t thread, void **retval)
     p = curproc->next_thread;
     while(p){
       if(p->tid == thread){
-        cprintf("found tid: %d\n", (int)p->tid);
+        // cprintf("found tid: %d\n", (int)p->tid);
         found = 1;
         if(p->state == ZOMBIE){
           dealloc_thread(p);
@@ -1264,7 +1264,7 @@ thread_join(thread_t thread, void **retval)
 int
 dealloc_thread(struct proc* worker){
   struct proc* hmaster;
-  cprintf("%d willl be deallocated\n", (int)worker->pid);
+  // cprintf("%d willl be deallocated\n", (int)worker->pid);
   if(!worker->master)
     return -1;
 
@@ -1380,4 +1380,19 @@ kill_threads(struct proc* hmaster){
     }
     sleep(hmaster, &ptable.lock);
   }
+}
+
+void
+sleep_other_threads(struct proc* self)
+{
+  struct proc * p;
+  acquire(&ptable.lock);
+  p = get_highest_master(self);
+  while(p){
+    if(p!=self && p->state == RUNNABLE){
+      p->state = SLEEPING;
+    }
+    p = p->next_thread;
+  }
+  release(&ptable.lock);
 }

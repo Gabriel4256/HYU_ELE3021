@@ -127,6 +127,7 @@ int             getlev(void);
 int             dealloc_thread(struct proc*);
 void            kill_threads(struct proc*);
 struct proc*    get_highest_master(struct proc*);
+void            sleep_other_threads(struct proc*);
 
 //thread related syscalls
 int             thread_create(thread_t* , void* (*start_routine)(void *), void*);
@@ -193,6 +194,7 @@ void            freevm(pde_t*);
 void            inituvm(pde_t*, char*, uint);
 int             loaduvm(pde_t*, char*, struct inode*, uint, uint);
 pde_t*          copyuvm(pde_t*, uint);
+pde_t*          copyuvm2(pde_t*, uint);
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);

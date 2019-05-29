@@ -6,6 +6,43 @@ thread_t thread[15];
 thread_t tl = 150;
 int result = 0;
 char *argv[] = { "ls", 0 };
+int fd[2];
+
+void *reader(){
+	while(1){
+		char ch;
+		int result;
+
+		result = read(fd[0], &ch, 1);
+		if (result != 1){
+			printf(1,"Reading Error\n");
+		}
+
+		printf(1,"Reader: %c\n", ch);
+	}
+
+	return 0;
+}
+
+void *writer(){
+	int result;
+	char ch = 'A';
+
+	while(1){
+		result = write(fd[1], &ch, 1);
+		if(result != 1){
+			printf(1,"Write error\n");
+		}
+
+		printf(1,"Writer: %c\n", ch);
+		if(ch == 'Z')
+			ch = 'A' - 1;
+
+		ch++;
+	}
+
+	return 0;
+}
 
 void *fun2(void *arg){
 	sleep(10);
@@ -19,7 +56,7 @@ void *thread_main(void *arg)
 {
 	int i;
 	int* ad;
-	int ret;
+	// int ret;
 	// double result=0.0;
 
 	//printf(1, "therad: %d, %d\n", (int)arg, getpid());
@@ -31,6 +68,15 @@ void *thread_main(void *arg)
      			result++;
    		}
    		//printf(1, "thread: %d, result = %d\n", (int)arg, (int)result);
+	// }
+	// if(getpid() % 2 == 0){
+		// fork();
+		printf(1, "sdff\n");
+		// sleep( getpid() * 100);
+		// printf(1, "Sleep end\n");
+	// }
+	// else{
+		// thread_exit((void*)3);
 	// }
 	ad = (int*)sbrk(sizeof(int) * (int)arg);
 	for(i=0; i<(int)arg; i++){
@@ -45,16 +91,16 @@ void *thread_main(void *arg)
 		// sleep(1000);
 		// kill(8);
 		// exec("ls", argv);
-		thread_create(&(thread[3]), &fun2, (void *)15);
-		thread_join(thread[3], (void**)&ret);
-		printf(1, "retval: %d\n", ret);
+		// thread_create(&(thread[3]), &fun2, (void *)15);
+		// thread_join(thread[3], (void**)&ret);
+		// printf(1, "retval: %d\n", ret);
 		//exit();
 	}
 	if((int)arg == 15){
 		// exit();
 	}
-	while(1){}
-	if(getpid()!=3)
+	// while(1){}
+	// if(getpid()!=3)
 		thread_exit(arg);
 	return 0;
 }
@@ -63,12 +109,28 @@ int
 main(int argc, char *argv[])
 {
     int i = 10;
+		int result;
+
+		result = pipe(fd);
+		if(result < 0){
+			printf(1, "Error on creating pipe\n");
+		}
+		// thread_create(&(thread[0]), &reader, 0);
+		// thread_create(&(thread[1]), &writer, 0);
+
+		// thread_join(thread[0], 0);
+		// thread_join(thread[1], 0);
 		// int ret = 0;
 		// thread_t* tmp;
-		for(i=0; i<10; i++){
+		for(i=0; i<2; i++){
     	thread_create(&(thread[i]), &thread_main, (void *)i);
 			printf(1, "tid: %d\n", (int)(thread[i]));
 		}
+		thread_join(thread[0], 0);
+		fork();
+		// thread_create(&(thread[0]), &thread_main, (void *)i);
+		// sleep(10000);
+		printf(1, "Main sleep end\n\n\n");
 		// exec("ls", argv);
 		// thread_create(&tl, &thread_main, (void*)i);
 		// tmp = &tl;
