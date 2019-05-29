@@ -30,6 +30,8 @@ exec(char *path, char **argv)
   //   }
   //   p = p->next_thread;
   // }
+  if(curproc->killed)
+    return -1;
   sleep_other_threads(curproc);
 
   begin_op();

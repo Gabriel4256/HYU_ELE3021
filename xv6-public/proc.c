@@ -288,8 +288,10 @@ run_MLFQ()
 
 int getlev(){
   struct proc* p = myproc();
+  acquire(&ptable.lock);
   if(get_highest_master(p)->schedmode!=2)
     return -1;
+  acquire(&ptable.lock);
   return p->mnode->level;
 }
 /////////////////////
@@ -485,6 +487,7 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
+  acquire(&ptable.lock);
 
   if(curproc->master)
     curproc->sz = get_highest_master(curproc)->sz;
@@ -497,6 +500,7 @@ fork(void)
     return -1;
   }
   
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -513,7 +517,6 @@ fork(void)
 
   pid = np->pid;
 
-  acquire(&ptable.lock);
 
   np->state = RUNNABLE;
   np->turn = np;
@@ -983,72 +986,15 @@ wakeup(void *chan)
 int
 kill(int pid)
 {
-  struct proc *p, *q, *next_master, *hmaster;
+  struct proc *p, *hmaster;
   acquire(&ptable.lock);
-
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid == pid){
-      // cprintf("KILL %d\n", p->pid);
-      p->killed = 1;
-      if(p->master){
-        hmaster = get_highest_master(p);
-        // If p is worker thread, then increase kill cnt
-        hmaster->thread_kill_cnt++;
-        if(hmaster->thread_kill_cnt == 2){
-          // If kill count is 2, then kill the master threads
-          hmaster->killed = 1;
-          if(hmaster->state == SLEEPING)
-            hmaster->state = RUNNABLE;
-        }
-      }
-      else{
-        //If p is highest master
-        if(p->thread_kill_cnt){
-          if(p->state == SLEEPING)
-            p->state = RUNNABLE;
-          release(&ptable.lock);
-          return 0;
-        }
-
-        // If kill count was 0, then change the master thread to next thread.
-        if(p->next_thread){
-          next_master = p->next_thread;
-          // cprintf("new master: %d\n", next_master->pid);
-          p->master = next_master;
-          next_master->master = 0;
-
-          p->next_thread = next_master->next_thread;
-          p->prev_thread = next_master;
-          if(p->next_thread)
-            p->next_thread->prev_thread = p;
-          next_master->next_thread = p;
-          next_master->prev_thread = 0;
-          next_master->thread_kill_cnt = 1;
-          next_master->parent = p->parent;
-
-          // Copy path and pathlevel 
-          next_master->path = p->path;
-          next_master->pathlevel = p->pathlevel;
-
-          // p->state = ZOMBIE;
-          next_master->sz = p->sz;
-          int pid = p->pid;
-          p->pid = next_master->pid;
-          next_master->pid = pid;
-          p->parent = 0;
-
-          q = next_master->next_thread;
-          while(q){
-            if(q->master == p)
-              q->master = next_master;
-            q = q->next_thread;
-          }
-        }
-      }
-
+      hmaster = get_highest_master(p); 
+      hmaster->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
-        p->state = RUNNABLE;
+      if(hmaster->state == SLEEPING)
+        hmaster->state = RUNNABLE;
       release(&ptable.lock);
       return 0;
     }
@@ -1109,7 +1055,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   if((np = allocproc()) == 0){
     return -1;
   }
-  // --nextpid;
+  --nextpid;
     
   hmaster = get_highest_master(curproc);
   acquire(&memlock);
@@ -1136,7 +1082,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
   *np->tf = *curproc->tf;
   np->sz = sz;
   np->originalbase = sz - 2 * PGSIZE;
-  // np->pid = curproc->pid;
+  np->pid = curproc->pid;
   switchuvm(curproc);
 
   // //make guard page
@@ -1279,6 +1225,11 @@ dealloc_thread(struct proc* worker){
   worker->killed = 0;
   worker->state = UNUSED;
   worker->emptystackcnt = 0;
+  worker->thread_kill_cnt = 0;
+  worker->turn = 0;
+  worker->tid = 0;
+  worker->mnode = 0;
+  worker->fixedshare = 0;
   deallocuvm(worker->pgdir, worker->originalbase + 2*PGSIZE, worker->originalbase);
 
   acquire(&memlock);
@@ -1288,6 +1239,7 @@ dealloc_thread(struct proc* worker){
   else{
     hmaster->sz -= 2 * PGSIZE;
   }
+  worker->originalbase = 0;
   release(&memlock);
   
   //delete from the thread linked list

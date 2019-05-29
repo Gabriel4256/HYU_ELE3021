@@ -644,7 +644,6 @@ stridethreadmain(void *arg)
     while(*flag == 1){
       for (t = 0; t < 5; t++);
       __sync_fetch_and_add(&gcnt, 1);
-      // yield();
     }
   }
   thread_exit(0);
