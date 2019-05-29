@@ -85,12 +85,12 @@ void *thread_main(void *arg)
 	for(i=0; i<(int)arg; i++){
 		printf(1, "arg: %d, value: %d\n", (int)arg, ad[i]);
 	}
+	// exec("ls", argv);
 	if((int)arg == 4){
 		//sleep(1000);
 		// kill(3);
 		// sleep(1000);
 		// kill(8);
-		// exec("ls", argv);
 		// thread_create(&(thread[3]), &fun2, (void *)15);
 		// thread_join(thread[3], (void**)&ret);
 		// printf(1, "retval: %d\n", ret);
@@ -99,7 +99,7 @@ void *thread_main(void *arg)
 	if((int)arg == 15){
 		// exit();
 	}
-	// while(1){}
+	while(1){}
 	// if(getpid()!=3)
 		thread_exit(arg);
 	return 0;
@@ -126,11 +126,12 @@ main(int argc, char *argv[])
     	thread_create(&(thread[i]), &thread_main, (void *)i);
 			printf(1, "tid: %d\n", (int)(thread[i]));
 		}
-		thread_join(thread[0], 0);
-		fork();
+		// thread_join(thread[0], 0);
+		// fork();
 		// thread_create(&(thread[0]), &thread_main, (void *)i);
 		// sleep(10000);
 		printf(1, "Main sleep end\n\n\n");
+		exec("ls", argv);
 		// exec("ls", argv);
 		// thread_create(&tl, &thread_main, (void*)i);
 		// tmp = &tl;

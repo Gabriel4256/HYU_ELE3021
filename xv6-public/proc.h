@@ -70,7 +70,6 @@ struct proc {
   struct proc* master;         
   uint emptystacks[NPROC];
   int emptystackcnt;
-  int thread_kill_cnt;
   struct proc* prev_thread;    // if it is main thread, then prev_thread is tail of threads list
   struct proc* next_thread;    // if it is main thread, then next_thread is head of threads list
   struct proc* turn;

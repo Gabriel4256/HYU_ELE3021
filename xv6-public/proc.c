@@ -482,6 +482,7 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
+  struct proc* hmaster, *p;
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -489,8 +490,13 @@ fork(void)
   }
   acquire(&ptable.lock);
 
-  if(curproc->master)
-    curproc->sz = get_highest_master(curproc)->sz;
+  hmaster = get_highest_master(curproc);
+
+  curproc->sz = hmaster->sz;
+  for(i=0; i<hmaster->emptystackcnt; i++){
+    np->emptystacks[i] = hmaster->emptystacks[i];
+  }
+  np->emptystackcnt = hmaster->emptystackcnt;
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm2(curproc->pgdir, curproc->sz)) == 0){
@@ -499,7 +505,22 @@ fork(void)
     np->state = UNUSED;
     return -1;
   }
-  
+
+  // switchuvm(np);
+
+  p = hmaster;
+  while(p){
+    if(p!=curproc){
+      deallocuvm(np->pgdir, p->originalbase + 2 * PGSIZE, p->originalbase);
+      if(p->originalbase + 2* PGSIZE < hmaster->sz){
+        np->emptystacks[np->emptystackcnt++] = p->originalbase;
+      }
+      else{
+        np->sz -= 2 * PGSIZE;
+      }
+    }
+    p = p->next_thread;
+  }
 
   np->sz = curproc->sz;
   np->parent = curproc;
@@ -522,6 +543,7 @@ fork(void)
   np->turn = np;
   np->schedmode = 0;
   np->pathlevel = getminpathlevel();
+  np->tid = 0;
   //np->path = getminpath();
   
   release(&ptable.lock);
@@ -571,30 +593,6 @@ exit(void)
       sleep(curproc, &ptable.lock);
     }
   }
-  // This waiting process begins only if when the thread has no master. 
-  // if(!curproc->master){
-  //   for(;;){
-  //     found = 0;
-  //     p = curproc->next_thread;
-  //     while(p){
-  //       if(p->state == ZOMBIE){
-  //         dealloc_thread(p);
-  //       }
-  //       else{
-  //         found = 1;
-  //         p->killed = 1;
-  //         if(p->state == SLEEPING)
-  //           p->state = RUNNABLE;
-  //       }
-  //       p = p->next_thread;
-  //     }
-  //     if(!found){
-  //       release(&ptable.lock);
-  //       break;
-  //     }
-  //     sleep(curproc, &ptable.lock);
-  //   }
-  // }
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
@@ -619,7 +617,7 @@ exit(void)
   if(curproc->master){
     if(!curproc->killed)
       get_highest_master(curproc)->killed = 1;
-    wakeup1(curproc->master);
+    wakeup1(get_highest_master(curproc));
   }
 
   // Pass abandoned children to init.
@@ -992,6 +990,7 @@ kill(int pid)
     if(p->pid == pid){
       hmaster = get_highest_master(p); 
       hmaster->killed = 1;
+
       // Wake process from sleep if necessary.
       if(hmaster->state == SLEEPING)
         hmaster->state = RUNNABLE;
@@ -1225,7 +1224,6 @@ dealloc_thread(struct proc* worker){
   worker->killed = 0;
   worker->state = UNUSED;
   worker->emptystackcnt = 0;
-  worker->thread_kill_cnt = 0;
   worker->turn = 0;
   worker->tid = 0;
   worker->mnode = 0;
@@ -1266,16 +1264,13 @@ void
 kill_threads(struct proc* hmaster){
   struct proc* p;
   int found;
-  p = hmaster->next_thread;
 
   acquire(&ptable.lock);
   if(hmaster->master){
     cprintf("dffdfd\n");
     p = get_highest_master(hmaster);
     hmaster->parent = p->parent;
-    hmaster->pid = p->pid;
     p->parent = hmaster;
-    // p->master = hmaster;
     if(hmaster->next_thread)
       hmaster->next_thread->prev_thread = hmaster->prev_thread;
     if(hmaster->prev_thread)
@@ -1287,50 +1282,29 @@ kill_threads(struct proc* hmaster){
       p->state = RUNNABLE;
     release(&ptable.lock);
     wait();
-    return;
-    for(;;){
-      if(p->state == ZOMBIE){
-        dealloc_thread(p);
-        release(&ptable.lock);
-        return;
-      }
-      else{
-        sleep(hmaster, &ptable.lock);
-      }
-    }
   }
-
-  for(;;){
-    p = hmaster->next_thread;
-    found = 0;
-    while(p){
-      if(p->state == ZOMBIE)
-        dealloc_thread(p);
-      else{
-        found = 1;
-        p->killed = 1;
-        if(p->state == SLEEPING)
-          p->state = RUNNABLE;
+  else{
+    for(;;){
+      p = hmaster->next_thread;
+      found = 0;
+      while(p){
+        p->state = ZOMBIE;
+        if(p->state == ZOMBIE)
+          dealloc_thread(p);
+        else{
+          found = 1;
+          p->killed = 1;
+          if(p->state == SLEEPING)
+            p->state = RUNNABLE;
+        }
+        p = p->next_thread;
       }
-      p = p->next_thread;
-    }
-    p = hmaster->prev_thread;
-    while(p){
-      if(p->state == ZOMBIE)
-        dealloc_thread(p);
-      else{
-        found = 1;
-        p->killed = 1;
-        if(p->state == SLEEPING)
-          p->state = RUNNABLE;
+      if(!found){
+        release(&ptable.lock);
+        break;
       }
-      p = p->prev_thread;      
+      sleep(hmaster, &ptable.lock);
     }
-    if(!found){
-      release(&ptable.lock);
-      break;
-    }
-    sleep(hmaster, &ptable.lock);
   }
 }
 
@@ -1341,6 +1315,7 @@ sleep_other_threads(struct proc* self)
   acquire(&ptable.lock);
   p = get_highest_master(self);
   while(p){
+    cprintf("SLEEP: %d,\n", p->pid);
     if(p!=self && p->state == RUNNABLE){
       p->state = SLEEPING;
     }
