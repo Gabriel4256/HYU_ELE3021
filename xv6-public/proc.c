@@ -489,7 +489,7 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *curproc = myproc();
-  struct proc* hmaster, *p;
+  struct proc* hmaster; //, *p;
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -515,19 +515,19 @@ fork(void)
 
   // switchuvm(np);
 
-  p = hmaster;
-  while(p){
-    if(p!=curproc){
-      deallocuvm(np->pgdir, p->originalbase + 2 * PGSIZE, p->originalbase);
-      if(p->originalbase + 2* PGSIZE < hmaster->sz){
-        np->emptystacks[np->emptystackcnt++] = p->originalbase;
-      }
-      else{
-        np->sz -= 2 * PGSIZE;
-      }
-    }
-    p = p->next_thread;
-  }
+  // p = hmaster;
+  // while(p){
+  //   if(p!=curproc){
+  //     deallocuvm(np->pgdir, p->originalbase + 2 * PGSIZE, p->originalbase);
+  //     if(p->originalbase + 2* PGSIZE < hmaster->sz){
+  //       np->emptystacks[np->emptystackcnt++] = p->originalbase;
+  //     }
+  //     else{
+  //       np->sz -= 2 * PGSIZE;
+  //     }
+  //   }
+  //   p = p->next_thread;
+  // }
 
   np->sz = curproc->sz;
   np->parent = curproc;
