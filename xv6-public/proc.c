@@ -173,9 +173,13 @@ updatevals()
   defaultvmp.highpr = 0;
   fixedmin = 0;
   int mlfqcnt = 0;
+  int mastercnt = 0;
   // int pathlevel;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == RUNNABLE){
+      if(!p->master){
+        mastercnt++;
+      }
       hmaster = get_highest_master(p);
       if(hmaster->schedmode == 0){
         if(min2 == -1 || hmaster->pathlevel< min2)
@@ -184,8 +188,9 @@ updatevals()
           defaultvmp.highpr = hmaster;
         }
       }
-      else if(hmaster->schedmode == 1){ 
-        totalfixedshare += hmaster->fixedshare;
+      else if(hmaster->schedmode == 1){
+        if(!p->master)
+          totalfixedshare += p->fixedshare;
         if(min == -1 || hmaster->path < min){
           fixedmin = hmaster;
           min = hmaster->path;
@@ -196,6 +201,8 @@ updatevals()
       }
     }
   }
+  // if(mastercnt > 0)
+  //   cprintf("# of master: %d\n", mastercnt);
   if(defaultvmp.highpr){
     defaultvmp.highpr->path = defaultvmp.path;
   }
@@ -1314,8 +1321,8 @@ sleep_other_threads(struct proc* self)
   struct proc * p;
   acquire(&ptable.lock);
   p = get_highest_master(self);
+  cprintf("SLEEP: %d,\n", self->pid);
   while(p){
-    cprintf("SLEEP: %d,\n", p->pid);
     if(p!=self && p->state == RUNNABLE){
       p->state = SLEEPING;
     }

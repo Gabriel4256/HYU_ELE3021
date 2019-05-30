@@ -644,6 +644,7 @@ stridethreadmain(void *arg)
     while(*flag == 1){
       for (t = 0; t < 5; t++);
       __sync_fetch_and_add(&gcnt, 1);
+      yield();
     }
   }
   thread_exit(0);
@@ -666,9 +667,9 @@ stridetest(void)
     printf(1, "panic at fork in forktest\n");
     exit();
   } else if (pid == 0){
-    cpu_share(2);
+    run_MLFQ();
   } else{
-    cpu_share(10);
+    // cpu_share(10);
   }
 
   for (i = 0; i < NUM_THREAD; i++){
