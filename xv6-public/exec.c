@@ -119,12 +119,12 @@ exec(char *path, char **argv)
   switchuvm(curproc);
   if(!curproc->master){
     // If curproc is master, then kill other threads and wait for them to be deallocated, and clean up page table.
-    kill_threads(curproc);
+    dealloc_other_threads(curproc);
     freevm(oldpgdir);
   }
   else{
     // Otherwise, just kill master and
-    kill_threads(curproc);
+    dealloc_other_threads(curproc);
   }
   return 0;
 

@@ -846,10 +846,10 @@ scheduler(void)
       }
 
       //Handling for deallocation in case of kill
-      for(q = ptable.proc; q < &ptable.proc[NPROC]; q++){
-        if(get_highest_master(q) == p && q->state == ZOMBIE && q->killed)
-          dealloc_thread(q);
-      }
+      // for(q = ptable.proc; q < &ptable.proc[NPROC]; q++){
+      //   if(get_highest_master(q) == p && q->state == ZOMBIE && q->killed)
+      //     dealloc_thread(q);
+      // }
 
 
       // Switch to chosen process.  It is the process's job
@@ -1273,13 +1273,12 @@ get_highest_master(struct proc* p)
 }
 
 void
-kill_threads(struct proc* hmaster){
+dealloc_other_threads(struct proc* hmaster){
   struct proc* p;
   int found;
 
   acquire(&ptable.lock);
   if(hmaster->master){
-    cprintf("dffdfd\n");
     p = get_highest_master(hmaster);
     hmaster->parent = p->parent;
     p->parent = hmaster;

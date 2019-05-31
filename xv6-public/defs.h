@@ -125,7 +125,7 @@ int		        cpu_share(int);
 int             run_MLFQ();
 int             getlev(void);
 int             dealloc_thread(struct proc*);
-void            kill_threads(struct proc*);
+void            dealloc_other_threads(struct proc*);
 struct proc*    get_highest_master(struct proc*);
 void            sleep_other_threads(struct proc*);
 
