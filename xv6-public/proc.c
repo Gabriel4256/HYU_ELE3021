@@ -207,9 +207,12 @@ updatevals()
     defaultvmp.highpr->path = defaultvmp.path;
   }
   if(mlfqcnt){
+    if(mlfqvmp.path == -1)
+      mlfqvmp.path = getminpath();
     defaultvmp.stride = (double)100 / (double)(80 - totalfixedshare);
   }
   else{
+    mlfqvmp.path = -1;
     defaultvmp.stride = (double)100 / (double)(100 - totalfixedshare);
   }
   mlfqvmp.highpr = choosebymlfq();
@@ -282,6 +285,8 @@ run_MLFQ()
   acquire(&ptable.lock);
   if(!headers[0])
     initmlfq();
+  if(mlfqvmp.path == -1)
+    mlfqvmp.path = getminpath();
   hmaster = get_highest_master(p);
   //put all the threads in the queue
   while(hmaster){
