@@ -556,6 +556,8 @@ fork(void)
   np->schedmode = 0;
   np->pathlevel = getminpathlevel();
   np->tid = 0;
+  np->prev_thread = 0;
+  np->next_thread = 0;
   //np->path = getminpath();
   
   release(&ptable.lock);
@@ -1135,6 +1137,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     insertafter(headers[0], allocmlfqnode(np));
   }
   np->pathlevel = getminpathlevel();
+  np->retval = 0;
 
   release(&ptable.lock);
   return 0;
