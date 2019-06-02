@@ -1325,7 +1325,6 @@ sleep_other_threads(struct proc* self)
   struct proc * p;
   acquire(&ptable.lock);
   p = get_highest_master(self);
-  cprintf("SLEEP: %d,\n", self->pid);
   while(p){
     if(p!=self && p->state == RUNNABLE){
       p->state = SLEEPING;
