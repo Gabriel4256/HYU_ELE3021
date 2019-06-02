@@ -1137,7 +1137,7 @@ thread_create(thread_t * thread, void * (start_routine)(void *), void *arg)
     insertafter(headers[0], allocmlfqnode(np));
   }
   np->pathlevel = getminpathlevel();
-  np->retval = 0;
+  np->retval = 0; 
 
   release(&ptable.lock);
   return 0;
