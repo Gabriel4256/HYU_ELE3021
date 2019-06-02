@@ -39,6 +39,8 @@ struct mlfqnode* choosebymlfq();
 struct proc* choosebystride();
 int dealloc_thread(struct proc*);
 struct proc* get_highest_master(struct proc*);
+struct proc* getminproc(struct proc* a, struct proc* b);
+
 uint nexttid = 1;
 struct spinlock memlock;
 
@@ -207,8 +209,12 @@ updatevals()
     defaultvmp.highpr->path = defaultvmp.path;
   }
   if(mlfqcnt){
-    if(mlfqvmp.path == -1)
-      mlfqvmp.path = getminpath();
+    if(mlfqvmp.path == -1){
+      p = getminproc(fixedmin, defaultvmp.highpr);
+      mlfqvmp.path  = 0;
+      if(p)
+        mlfqvmp.path = p->path;
+    }
     defaultvmp.stride = (double)100 / (double)(80 - totalfixedshare);
   }
   else{

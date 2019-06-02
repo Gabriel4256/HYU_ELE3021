@@ -45,6 +45,7 @@ volatile int gcnt;
 int gpipe[2];
 
 int (*testfunc[NTEST])(void) = {
+  stridetest,
   racingtest,
   basictest,
   jointest1,
@@ -58,9 +59,9 @@ int (*testfunc[NTEST])(void) = {
   killtest,
   pipetest,
   sleeptest,
-  stridetest,
 };
 char *testname[NTEST] = {
+  "stridetest",
   "racingtest",
   "basictest",
   "jointest1",
@@ -74,7 +75,6 @@ char *testname[NTEST] = {
   "killtest",
   "pipetest",
   "sleeptest",
-  "stridetest",
 };
 
 int
@@ -644,6 +644,7 @@ stridethreadmain(void *arg)
     while(*flag == 1){
       for (t = 0; t < 5; t++);
       __sync_fetch_and_add(&gcnt, 1);
+      yield();
     }
   }
   thread_exit(0);
@@ -666,9 +667,11 @@ stridetest(void)
     printf(1, "panic at fork in forktest\n");
     exit();
   } else if (pid == 0){
-    cpu_share(2);
+    // cpu_share(2);
+    run_MLFQ();
   } else{
     cpu_share(10);
+    // cpu_share(10);
   }
 
   for (i = 0; i < NUM_THREAD; i++){
