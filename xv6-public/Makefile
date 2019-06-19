@@ -189,6 +189,7 @@ UPROGS=\
 	_thread_userapp\
 	_test_thread\
 	_test_thread2\
+	_test_hugefile\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
@@ -258,7 +259,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
-	printf.c umalloc.c my_userapp.c my_getppid_userapp.c yield_userapp.c test_scheduler.c\
+	printf.c umalloc.c my_userapp.c my_getppid_userapp.c yield_userapp.c test_scheduler.c test_hugefile.c\
 	test_thread.c thread_userapp.c test_thread2.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
