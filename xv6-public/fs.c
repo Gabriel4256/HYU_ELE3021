@@ -458,6 +458,7 @@ bmap(struct inode *ip, uint bn)
   panic("bmap: out of range");
 }
 
+
 // Truncate inode (discard contents).
 // Only called when the inode has no links
 // to it (no directory entries referring to it)
@@ -467,8 +468,12 @@ static void
 itrunc(struct inode *ip)
 {
   int i, j, k;
+  // , k;
   struct buf *bp, *bp2, *bp3;
-  uint *a, *b, *c;
+  // , *bp2, *bp3;
+  uint *a, *b, *c; 
+  // *b;
+  // , *b, *c;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -495,10 +500,11 @@ itrunc(struct inode *ip)
     for(i=0; i< NINDIRECT; i++){
       if (a[i]){
         bp2 = bread(ip->dev, a[i]);
-        b = (uint*)bp->data;
+        b = (uint*)bp2->data;
         for(j=0; j< NINDIRECT; j++){
-          if(b[j])
+          if(b[j]){
             bfree(ip->dev, b[j]);
+          }
         }
         brelse(bp2);
         bfree(ip->dev, a[i]);
@@ -507,6 +513,7 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT + 1]);
     ip->addrs[NDIRECT + 1] = 0;
+    // itrunc_recur(ip, ip->addrs[NDIRECT+1], 1,2);
   }
 
   if(ip->addrs[NDIRECT + 2]){
@@ -515,11 +522,11 @@ itrunc(struct inode *ip)
     for(i=0; i< NINDIRECT; i++){
       if (a[i]){
         bp2 = bread(ip->dev, a[i]);
-        b = (uint*)bp->data;
+        b = (uint*)bp2->data;
         for(j=0; j< NINDIRECT; j++){
           if(b[j]){
             bp3 = bread(ip->dev, b[j]);
-            c = (uint*)bp2->data;
+            c = (uint*)bp3->data;
             for(k=0; k<NINDIRECT; k++){
               if(c[k])
                 bfree(ip->dev, c[k]);
@@ -535,6 +542,7 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT + 2]);
     ip->addrs[NDIRECT + 2] = 0;
+    // itrunc_recur(ip, ip->addrs[NDIRECT + 2], 1, 3);
   }
 
   ip->size = 0;
