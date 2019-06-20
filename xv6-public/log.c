@@ -137,6 +137,11 @@ begin_op(void)
       sleep(&log, &log.lock);
     } else if(log.lh.n + (log.outstanding+1)*MAXOPBLOCKS > LOGSIZE){
       // this op might exhaust log space; wait for commit.
+      if(log.outstanding == 0){
+        release(&log.lock);
+        sync();
+        acquire(&log.lock);
+      }
       sleep(&log, &log.lock);
     } else {
       log.outstanding += 1;
@@ -185,9 +190,9 @@ end_op(void)
     if(log.lh.n > 0){
       write_log();
       write_head();
+      if(do_push)
+        sync();
     }
-    if(do_push)
-      sync();
 
     // cprintf("daas\n");
     acquire(&log.lock);
@@ -261,19 +266,23 @@ int
 sync(void)
 {
   if(log.lh.n > 0){
-    // acquire(&log.lock);
-    // log.pushing = 1;
-    // release(&log.lock);
+    acquire(&log.lock);
+    if(log.pushing){
+      release(&log.lock);
+      return 0;
+    }
+    log.pushing = 1;
+    release(&log.lock);
 
     install_trans();
     log.lh.n = 0;
     write_head();
 
-    // acquire(&log.lock);
-    // // log.full = 0;
-    // log.pushing = 0;
-    // wakeup(&log);
-    // release(&log.lock);
+    acquire(&log.lock);
+    // log.full = 0;
+    log.pushing = 0;
+    wakeup(&log);
+    release(&log.lock);
     return 0;
   }
   return -1;
