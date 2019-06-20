@@ -4,6 +4,7 @@
 #include "fs.h"
 #include "fcntl.h"
 
+// #define BLOCK_NUM (2 * 1024 * 16)
 #define BLOCK_NUM (2 * 1024 * 16)
 #define BLOCK_SIZE (512)
 #define STRESS_NUM (4)

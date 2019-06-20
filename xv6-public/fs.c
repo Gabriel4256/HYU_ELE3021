@@ -468,12 +468,8 @@ static void
 itrunc(struct inode *ip)
 {
   int i, j, k;
-  // , k;
   struct buf *bp, *bp2, *bp3;
-  // , *bp2, *bp3;
   uint *a, *b, *c; 
-  // *b;
-  // , *b, *c;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -513,7 +509,6 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT + 1]);
     ip->addrs[NDIRECT + 1] = 0;
-    // itrunc_recur(ip, ip->addrs[NDIRECT+1], 1,2);
   }
 
   if(ip->addrs[NDIRECT + 2]){
@@ -542,7 +537,6 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT + 2]);
     ip->addrs[NDIRECT + 2] = 0;
-    // itrunc_recur(ip, ip->addrs[NDIRECT + 2], 1, 3);
   }
 
   ip->size = 0;
