@@ -45,7 +45,7 @@ struct log {
   int pushing;     // in sync(), please wait.
   int dev;
   struct logheader lh;
-  int full;
+  int sync_chan;
 };
 struct log log;
 
@@ -67,7 +67,6 @@ initlog(int dev)
   log.start = sb.logstart;
   log.size = sb.nlog;
   log.dev = dev;
-  // log.full = 0;
   recover_from_log();
 }
 
@@ -133,15 +132,9 @@ begin_op(void)
 {
   acquire(&log.lock);
   while(1){
-    if(log.committing || log.pushing){
+    if(log.committing){
       sleep(&log, &log.lock);
     } else if(log.lh.n + (log.outstanding+1)*MAXOPBLOCKS > LOGSIZE){
-      // this op might exhaust log space; wait for commit.
-      if(log.outstanding == 0){
-        release(&log.lock);
-        sync();
-        acquire(&log.lock);
-      }
       sleep(&log, &log.lock);
     } else {
       log.outstanding += 1;
@@ -157,49 +150,38 @@ void
 end_op(void)
 {
   int do_commit = 0;
-  int do_push = 0;
+  // int do_push = 0;
 
   acquire(&log.lock);
   log.outstanding -= 1;
   if(log.committing)
     panic("log.committing");
-  if(log.pushing)
-    sleep(&log, &log.lock);
   if(log.outstanding == 0){
-    do_commit = 1;
-    log.committing = 1;
     if(log.lh.n + MAXOPBLOCKS > LOGSIZE){
-      // cprintf("%d of %d filled\n", log.lh.n, LOGSIZE);
-      do_push = 1;
-      log.pushing = 1;
+      do_commit = 1;
+      log.committing = 1;
     }
-  } else {
-    // begin_op() may be waiting for log space,
-    // and decrementing log.outstanding has decreased
-    // the amount of reserved space.
-    wakeup(&log);
+    wakeup(&log.sync_chan);
   }
+  if(!log.committing)
+    wakeup(&log);
+  
+  // if(log.outstanding == 0){
+  //   wakeup(&log.sync_chan);
+  // }
+  // else {
+  //   // begin_op() may be waiting for log space,
+  //   // and decrementing log.outstanding has decreased
+  //   // the amount of reserved space.
+  //   wakeup(&log);
+  // }
   release(&log.lock);
 
   if(do_commit){
     // call commit w/o holding locks, since not allowed
     // to sleep with locks.
     // commit();
-
-    // Write just log into the disk, not block modifications.
-    if(log.lh.n > 0){
-      write_log();
-      write_head();
-      if(do_push)
-        sync();
-    }
-
-    // cprintf("daas\n");
-    acquire(&log.lock);
-    log.committing = 0;
-    log.pushing = 0;
-    wakeup(&log);
-    release(&log.lock);
+    sync();
   }
 }
 
@@ -219,17 +201,17 @@ write_log(void)
   }
 }
 
-// static void
-// commit()
-// {
-//   if (log.lh.n > 0) {
-//     write_log();     // Write modified blocks from cache to log
-//     write_head();    // Write header to disk -- the real commit
-//     install_trans(); // Now install writes to home locations
-//     log.lh.n = 0;
-//     write_head();    // Erase the transaction from the log
-//   }
-// }
+static void
+commit()
+{
+  if (log.lh.n > 0) {
+    write_log();     // Write modified blocks from cache to log
+    write_head();    // Write header to disk -- the real commit
+    install_trans(); // Now install writes to home locations
+    log.lh.n = 0;
+    write_head();    // Erase the transaction from the log
+  }
+}
 
 // Caller has modified b->data and is done with the buffer.
 // Record the block number and pin in the cache with B_DIRTY.
@@ -244,7 +226,6 @@ void
 log_write(struct buf *b)
 {
   int i;
-
   if (log.lh.n >= LOGSIZE || log.lh.n >= log.size - 1)
     panic("too big a transaction");
   if (log.outstanding < 1)
@@ -267,20 +248,17 @@ sync(void)
 {
   if(log.lh.n > 0){
     acquire(&log.lock);
-    if(log.pushing){
-      release(&log.lock);
-      return 0;
+    log.committing = 1;
+    while(log.outstanding){
+      // wait until log.outstanding becomes 0
+      sleep(&log.sync_chan, &log.lock);
     }
-    log.pushing = 1;
     release(&log.lock);
 
-    install_trans();
-    log.lh.n = 0;
-    write_head();
+    commit();
 
     acquire(&log.lock);
-    // log.full = 0;
-    log.pushing = 0;
+    log.committing = 0;
     wakeup(&log);
     release(&log.lock);
     return 0;
