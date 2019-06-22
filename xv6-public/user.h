@@ -32,6 +32,8 @@ int getlev(void);
 int thread_create(uint* thread, void * (*start_routine)(void *), void * arg);
 void thread_exit(void*);
 int thread_join(thread_t, void**);
+int sync();
+int get_log_num();
 
 // ulib.c
 int stat(const char*, struct stat*);

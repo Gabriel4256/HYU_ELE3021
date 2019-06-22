@@ -87,6 +87,10 @@ void            log_write(struct buf*);
 void            begin_op();
 void            end_op();
 
+// newly added
+int             sync();
+int             get_log_num();
+
 // mp.c
 extern int      ismp;
 void            mpinit(void);

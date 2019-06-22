@@ -160,3 +160,15 @@ sys_thread_join(void)
     return -1;
   return thread_join(i, (void**)retval);
 }
+
+int
+sys_sync(void)
+{
+  return sync();
+}
+
+int
+sys_get_log_num(void)
+{
+  return get_log_num();
+}

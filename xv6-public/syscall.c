@@ -118,6 +118,8 @@ extern int sys_getlev(void);
 extern int sys_thread_create(void);
 extern int sys_thread_exit(void);
 extern int sys_thread_join(void);
+extern int sys_sync();
+extern int sys_get_log_num();
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -149,7 +151,9 @@ static int (*syscalls[])(void) = {
 [SYS_getlev] sys_getlev,
 [SYS_thread_create] sys_thread_create,
 [SYS_thread_exit] sys_thread_exit,
-[SYS_thread_join] sys_thread_join
+[SYS_thread_join] sys_thread_join,
+[SYS_sync] sys_sync,
+[SYS_get_log_num] sys_get_log_num
 };
 
 void

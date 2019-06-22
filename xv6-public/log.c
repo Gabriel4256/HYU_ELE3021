@@ -154,8 +154,8 @@ end_op(void)
 
   acquire(&log.lock);
   log.outstanding -= 1;
-  if(log.committing)
-    panic("log.committing");
+  // if(log.committing)
+  //   panic("log.committing");
   if(log.outstanding == 0){
     if(log.lh.n + MAXOPBLOCKS > LOGSIZE){
       do_commit = 1;
@@ -166,21 +166,11 @@ end_op(void)
   if(!log.committing)
     wakeup(&log);
   
-  // if(log.outstanding == 0){
-  //   wakeup(&log.sync_chan);
-  // }
-  // else {
-  //   // begin_op() may be waiting for log space,
-  //   // and decrementing log.outstanding has decreased
-  //   // the amount of reserved space.
-  //   wakeup(&log);
-  // }
   release(&log.lock);
 
   if(do_commit){
-    // call commit w/o holding locks, since not allowed
+    // call sync w/o holding locks, since not allowed
     // to sleep with locks.
-    // commit();
     sync();
   }
 }

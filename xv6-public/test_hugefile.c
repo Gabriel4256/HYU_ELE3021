@@ -44,7 +44,6 @@ main(int argc, char *argv[])
 
 // ============================================================================
 // ============================================================================
-
   printf(1, "2. read test\n");
   fd = open(path, O_RDONLY);
   for (i = 0; i < BLOCK_NUM; i++){
@@ -67,30 +66,38 @@ main(int argc, char *argv[])
 
 // ============================================================================
 // ============================================================================
-
-  printf(1, "3. stress test\n");
-  total = 0;
-  for (i = 0; i < STRESS_NUM; i++) {
-    printf(1, "stress test...%d \n", i);
-    if(unlink(path) < 0){
-      printf(1, "rm: %s failed to delete\n", path);
-      exit();
-    }
-    
-    fd = open(path, O_CREATE | O_RDWR);
-      for(j = 0; j < BLOCK_NUM; j++){
-        if (j % 100 == 0){
-          printf(1, "%d bytes totally written\n", total);
-        }
-        if ((r = write(fd, data, sizeof(data))) != sizeof(data)){
-          printf(1, "write returned %d : failed\n", r);
-          exit();
-        }
-        total += sizeof(data);
-      }
-      printf(1, "%d bytes written\n", total);
-    close(fd);
+  j = fork();
+  if(!j){
+    printf(1, "prev: %d\n", get_log_num());
+    sync();
+    printf(1, "result: %d\n", get_log_num());
   }
-
+  else{
+    printf(1, "3. stress test\n");
+    total = 0;
+    for (i = 0; i < STRESS_NUM; i++) {
+      printf(1, "stress test...%d \n", i);
+      if(unlink(path) < 0){
+        printf(1, "rm: %s failed to delete\n", path);
+        exit();
+      }
+      
+      fd = open(path, O_CREATE | O_RDWR);
+        for(j = 0; j < BLOCK_NUM; j++){
+          if (j % 100 == 0){
+            printf(1, "%d bytes totally written\n", total);
+          }
+          if ((r = write(fd, data, sizeof(data))) != sizeof(data)){
+            printf(1, "write returned %d : failed\n", r);
+            exit();
+          }
+          total += sizeof(data);
+        }
+        printf(1, "%d bytes written\n", total);
+      close(fd);
+    }
+  }
+  if(j)
+    wait();
   exit();
 }
